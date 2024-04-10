@@ -1,0 +1,5 @@
+opencv-python
+av
+ultralytics
+numpy
+shapely>=2.0.0
