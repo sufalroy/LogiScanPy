@@ -1,4 +1,5 @@
 import os
+
 import requests
 
 
@@ -44,6 +45,6 @@ def save_response_content(response, destination):
 if __name__ == "__main__":
     create_directories()
 
-    file_id = "17Wj90ds49htbtxJX3PSukPFeD9_Sm4ie"
-    destination = os.path.join("weights", "sack_yolov8_50e.pt")
+    file_id = "1oRj2OqCxwrgqs5o0VCm5a4sbbyDWx497"
+    destination = os.path.join("weights", "sack_yolov8_50e_v2.pt")
     download_file_from_google_drive(file_id, destination)
