@@ -2,9 +2,12 @@ import cv2
 from collections import defaultdict
 from ultralytics.utils.checks import check_imshow, check_requirements
 from ultralytics.utils.plotting import Annotator, colors
+import logging
 
 check_requirements("shapely>=2.0.0")
 from shapely.geometry import LineString, Point, Polygon
+
+logger = logging.getLogger(__name__)
 
 
 class ObjectCounter:
@@ -12,13 +15,10 @@ class ObjectCounter:
 
     def __init__(self):
         """Initializes the Counter with default values for various tracking and counting parameters."""
-        self._is_drawing = False
-        self._selected_point = None
+        self._window_name = "LogiScan.v.0.0.1"
         self._reg_pts = [(20, 400), (1260, 400)]
         self._line_dist_thresh = 15
         self._counting_region = None
-        self._region_color = (255, 0, 255)
-        self._region_thickness = 5
         self._im0 = None
         self._tf = None
         self._view_img = False
@@ -26,7 +26,6 @@ class ObjectCounter:
         self._view_out_counts = True
         self._names = None
         self._annotator = None
-        self._window_name = "LogiScan.v.0.0.1"
         self._in_counts = 0
         self._out_counts = 0
         self._count_ids = []
@@ -41,6 +40,8 @@ class ObjectCounter:
         self._draw_tracks = False
         self._track_color = None
         self._env_check = check_imshow(warn=True)
+        self._region_color = (255, 0, 255)
+        self._region_thickness = 5
 
     def set_args(self, classes_names, reg_pts, count_reg_color=(255, 0, 255), count_txt_color=(0, 0, 0),
                  count_bg_color=(255, 255, 255), line_thickness=2, track_thickness=2, view_img=False,
@@ -54,16 +55,16 @@ class ObjectCounter:
         self._track_thickness = track_thickness
         self._draw_tracks = draw_tracks
         if len(reg_pts) == 2:
-            print("Line Counter Initiated.")
+            logger.info("Line Counter Initiated.")
             self._reg_pts = reg_pts
             self._counting_region = LineString(self._reg_pts)
         elif len(reg_pts) >= 3:
-            print("Polygon Counter Initiated.")
+            logger.info("Polygon Counter Initiated.")
             self._reg_pts = reg_pts
             self._counting_region = Polygon(self._reg_pts)
         else:
-            print("Invalid Region points provided, region_points must be 2 for lines or >= 3 for polygons.")
-            print("Using Line Counter Now")
+            logger.warning("Invalid Region points provided, region_points must be 2 for lines or >= 3 for polygons.")
+            logger.info("Using Line Counter Now")
             self._counting_region = LineString(self._reg_pts)
         self._names = classes_names
         self._track_color = track_color
@@ -73,23 +74,6 @@ class ObjectCounter:
         self._region_thickness = region_thickness
         self._line_dist_thresh = line_dist_thresh
         self._cls_txtdisplay_gap = cls_txtdisplay_gap
-
-    def _mouse_event_for_region(self, event, x, y):
-        """This function is designed to move region with mouse events in a real-time video stream."""
-        if event == cv2.EVENT_LBUTTONDOWN:
-            for i, point in enumerate(self._reg_pts):
-                if isinstance(point, (tuple, list)) and len(point) >= 2 and (
-                        abs(x - point[0]) < 10 and abs(y - point[1]) < 10):
-                    self._selected_point = i
-                    self._is_drawing = True
-                    break
-        elif event == cv2.EVENT_MOUSEMOVE:
-            if self._is_drawing and self._selected_point is not None:
-                self._reg_pts[self._selected_point] = (x, y)
-                self._counting_region = Polygon(self._reg_pts)
-        elif event == cv2.EVENT_LBUTTONUP:
-            self._is_drawing = False
-            self._selected_point = None
 
     def _extract_and_process_tracks(self, tracks):
         """Extracts and processes tracks for object counting in a video stream."""
@@ -150,6 +134,7 @@ class ObjectCounter:
                     label += f"{str.capitalize(key)}: OUT {value['out']} \t"
                 else:
                     label += f"{str.capitalize(key)}: IN {value['in']} OUT {value['out']} \t"
+
         label = label.rstrip()
         label = label.split("\t")
         if label is not None:
@@ -163,8 +148,6 @@ class ObjectCounter:
         """Display frames."""
         if self._env_check:
             cv2.namedWindow(self._window_name)
-            if len(self._reg_pts) == 4:
-                cv2.setMouseCallback(self._window_name, self._mouse_event_for_region, {"region_points": self._reg_pts})
             cv2.imshow(self._window_name, self._im0)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 return
@@ -187,7 +170,7 @@ class ObjectCounter:
     def get_class_wise_count(self) -> dict:
         """Returns a dictionary containing the class-wise counts for objects entering and exiting the region.
 
-        Returns:
-            dict: A dictionary where keys are class names (strings) and values are dictionaries with "in" and "out" counts (integers).
+        Returns: dict: A dictionary where keys are class names (strings) and values are dictionaries with "in" and
+        "out" counts (integers).
         """
         return self._class_wise_count.copy()

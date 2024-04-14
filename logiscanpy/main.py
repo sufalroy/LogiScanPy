@@ -53,7 +53,8 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--show",
-        action="store_true",
+        type=bool,
+        default=True,
         help="Show object counting output",
     )
     parser.add_argument(
