@@ -1,16 +1,31 @@
 import argparse
 import logging
+import colorlog
 import os
 
 from logiscanpy.core.application import LogiScanPy
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+formatter = colorlog.ColoredFormatter(
+    "%(log_color)s%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
+    log_colors={
+        'DEBUG': 'blue',
+        'INFO': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'bold_red',
+    }
 )
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+logger.addHandler(stream_handler)
 
 
 def parse_arguments() -> argparse.Namespace:
