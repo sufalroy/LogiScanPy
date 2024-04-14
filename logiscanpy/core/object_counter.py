@@ -15,7 +15,7 @@ class ObjectCounter:
 
     def __init__(self):
         """Initializes the Counter with default values for various tracking and counting parameters."""
-        self._window_name = "LogiScan.v.0.0.1"
+        self._window_name = "LogiScan.v.0.1.0"
         self._reg_pts = [(20, 400), (1260, 400)]
         self._line_dist_thresh = 15
         self._counting_region = None

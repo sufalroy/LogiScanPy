@@ -12,8 +12,8 @@ TARGET_RESOLUTION = (640, 480)
 
 
 class LogiScanPy:
-    def __init__(self, args):
-        self.args = args
+    def __init__(self, config: dict):
+        self.config = config
         self.model = None
         self.video_capture = None
         self.video_writer = None
@@ -22,19 +22,19 @@ class LogiScanPy:
 
     def initialize(self):
         logger.info("Loading YOLOv8 model...")
-        self.model = YOLO(self.args.weights)
+        self.model = YOLO(self.config["weights"])
 
-        logger.info("Opening video source: %s", self.args.video)
-        self.video_capture = VideoCapture(self.args.video, rtsp=self.args.rtsp)
+        logger.info("Opening video source: %s", self.config["video"])
+        self.video_capture = VideoCapture(self.config["video"], rtsp=self.config["rtsp"])
 
         if not self.video_capture.is_opened():
             logger.error("Failed to open video source")
             return False
 
-        if self.args.save:
-            logger.info("Creating output video file: %s", self.args.output)
+        if self.config["save"]:
+            logger.info("Creating output video file: %s", self.config["output"])
             self.video_writer = cv2.VideoWriter(
-                self.args.output,
+                self.config["output"],
                 cv2.VideoWriter_fourcc(*"mp4v"),
                 30,
                 TARGET_RESOLUTION,
@@ -44,7 +44,7 @@ class LogiScanPy:
 
         self.object_counter = object_counter.ObjectCounter()
         self.object_counter.set_args(
-            view_img=self.args.show,
+            view_img=self.config["show"],
             reg_pts=line_points,
             count_reg_color=(0, 0, 255),
             classes_names=self.model.names,
@@ -68,13 +68,13 @@ class LogiScanPy:
                 break
 
             frame = cv2.resize(frame, TARGET_RESOLUTION)
-            tracks = self.model.track(frame, persist=True, show=False, classes=[self.args.class_id], verbose=False,
-                                      conf=self.args.confidence)
+            tracks = self.model.track(frame, persist=True, show=False, classes=[self.config["class_id"]], verbose=False,
+                                      conf=self.config["confidence"])
             frame = self.object_counter.start_counting(frame, tracks)
 
             self.publish_counts(previous_out_counts)
 
-            if self.args.save:
+            if self.config["save"]:
                 self.video_writer.write(frame)
 
     def publish_counts(self, previous_out_counts):
@@ -86,7 +86,7 @@ class LogiScanPy:
 
     def cleanup(self):
         self.video_capture.release()
-        if self.args.save:
+        if self.config["save"]:
             self.video_writer.release()
         cv2.destroyAllWindows()
         self.publisher.close_connection()
