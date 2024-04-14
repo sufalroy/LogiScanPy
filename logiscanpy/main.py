@@ -52,6 +52,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Class ID to count (default: 0)"
     )
     parser.add_argument(
+        "--confidence",
+        type=float,
+        default=0.5,
+        help="Confidence level (default: 0.5)",
+    )
+    parser.add_argument(
         "--show",
         type=bool,
         default=True,

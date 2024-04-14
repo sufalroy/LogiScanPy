@@ -68,7 +68,8 @@ class LogiScanPy:
                 break
 
             frame = cv2.resize(frame, TARGET_RESOLUTION)
-            tracks = self.model.track(frame, persist=True, show=False, classes=[self.args.class_id], verbose=False)
+            tracks = self.model.track(frame, persist=True, show=False, classes=[self.args.class_id], verbose=False,
+                                      conf=self.args.confidence)
             frame = self.object_counter.start_counting(frame, tracks)
 
             self.publish_counts(previous_out_counts)
