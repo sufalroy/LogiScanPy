@@ -1,9 +1,10 @@
-import cv2
 import logging
+
+import cv2
 from ultralytics import YOLO
 
 from logiscanpy.core import object_counter
-from logiscanpy.utility.video_capture import VideoCapture
+from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 from logiscanpy.utility.publisher import Publisher
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,11 @@ class LogiScanPy:
         self.model = YOLO(self.config["weights"])
 
         logger.info("Opening video source: %s", self.config["video"])
-        self.video_capture = VideoCapture(self.config["video"], rtsp=self.config["rtsp"])
+
+        if self.config["rtsp"]:
+            self.video_capture = RtspVideoCapture(self.config["video"])
+        else:
+            self.video_capture = VideoCapture(self.config["video"])
 
         if not self.video_capture.is_opened():
             logger.error("Failed to open video source")
