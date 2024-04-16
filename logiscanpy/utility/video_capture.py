@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from typing import Optional, Tuple
+from typing import Optional
 
 import cv2
 
