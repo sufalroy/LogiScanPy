@@ -74,7 +74,7 @@ class LogiScanPy:
 
             frame = cv2.resize(frame, TARGET_RESOLUTION)
             tracks = self.model.track(frame, persist=True, show=False, classes=[self.config["class_id"]], verbose=False,
-                                      conf=self.config["confidence"])
+                                      conf=self.config["confidence"], tracker="bytetrack.yaml")
             frame = self.object_counter.start_counting(frame, tracks)
 
             self.publish_counts(previous_out_counts)
