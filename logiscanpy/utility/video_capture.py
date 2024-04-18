@@ -37,7 +37,7 @@ class VideoCapture:
             self._cap = None
 
     def read(self):
-        """Reads a frame from the video stream, handling reconnections.
+        """Reads a frame from the video stream.
 
         Returns:
             A numpy array representing the frame, or None if an error occurs

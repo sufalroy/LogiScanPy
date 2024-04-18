@@ -4,6 +4,7 @@ import cv2
 from ultralytics import YOLO
 
 from logiscanpy.core import object_counter
+from logiscanpy.utility.calibration import calibrate_region
 from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 from logiscanpy.utility.publisher import Publisher
 
@@ -45,12 +46,18 @@ class LogiScanPy:
                 TARGET_RESOLUTION,
             )
 
-        line_points = [(1, 200), (1000, 200)]
+        frame = self.video_capture.read()
+
+        if frame is None:
+            print("Failed to read video frame.")
+            return False
+
+        polygon_vertices = calibrate_region(cv2.resize(frame, TARGET_RESOLUTION))
 
         self.object_counter = object_counter.ObjectCounter()
         self.object_counter.set_args(
             view_img=self.config["show"],
-            reg_pts=line_points,
+            reg_pts=polygon_vertices,
             count_reg_color=(0, 0, 255),
             classes_names=self.model.names,
             draw_tracks=False,
@@ -84,7 +91,7 @@ class LogiScanPy:
 
     def publish_counts(self, previous_out_counts):
         for class_name, counts in self.object_counter.get_class_wise_count().items():
-            out_count = counts["out"]
+            out_count = counts["in"]
             if class_name not in previous_out_counts or out_count > previous_out_counts[class_name]:
                 self.publisher.publish_message(class_name, out_count)
                 previous_out_counts[class_name] = out_count
