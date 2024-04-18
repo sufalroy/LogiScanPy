@@ -49,10 +49,11 @@ class LogiScanPy:
         frame = self.video_capture.read()
 
         if frame is None:
-            print("Failed to read video frame.")
+            logger.error("Failed to calibrate roi")
             return False
 
-        polygon_vertices = calibrate_region(cv2.resize(frame, TARGET_RESOLUTION))
+        frame = cv2.resize(frame, TARGET_RESOLUTION)
+        polygon_vertices = calibrate_region(frame)
 
         self.object_counter = object_counter.ObjectCounter()
         self.object_counter.set_args(
