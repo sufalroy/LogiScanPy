@@ -53,6 +53,8 @@ class LogiScanPy:
             return False
 
         frame = cv2.resize(frame, TARGET_RESOLUTION)
+
+        logger.info("Starting calibrating roi...")
         polygon_vertices = calibrate_region(frame)
 
         self.object_counter = object_counter.ObjectCounter()
@@ -61,7 +63,6 @@ class LogiScanPy:
             reg_pts=polygon_vertices,
             count_reg_color=(0, 0, 255),
             classes_names=self.model.names,
-            draw_tracks=False,
             line_thickness=2,
         )
 

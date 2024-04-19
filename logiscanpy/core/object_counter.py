@@ -1,10 +1,9 @@
 import cv2
 from collections import defaultdict
-from ultralytics.utils.checks import check_imshow, check_requirements
+from ultralytics.utils.checks import check_imshow
 from ultralytics.utils.plotting import Annotator, colors
 import logging
-
-check_requirements("shapely>=2.0.0")
+from typing import List, Tuple
 from shapely.geometry import LineString, Point, Polygon
 
 logger = logging.getLogger(__name__)
@@ -16,7 +15,7 @@ class ObjectCounter:
     def __init__(self):
         """Initializes the Counter with default values for various tracking and counting parameters."""
         self._window_name = "LogiScan.v.0.1.0"
-        self._reg_pts = [(20, 400), (1260, 400)]
+        self._reg_pts: List[Tuple[int, int]] = [(20, 400), (1260, 400)]
         self._line_dist_thresh = 15
         self._counting_region = None
         self._im0 = None
@@ -28,32 +27,43 @@ class ObjectCounter:
         self._annotator = None
         self._in_counts = 0
         self._out_counts = 0
-        self._count_ids = []
-        self._class_wise_count = {}
+        self._count_ids: List[int] = []
+        self._class_wise_count: dict = {}
         self._count_txt_thickness = 0
         self._count_txt_color = (255, 255, 255)
         self._count_bg_color = (255, 255, 255)
         self._cls_txtdisplay_gap = 50
         self._fontsize = 0.6
-        self._track_history = defaultdict(list)
+        self._track_history: defaultdict = defaultdict(list)
         self._track_thickness = 2
-        self._draw_tracks = False
         self._track_color = None
         self._env_check = check_imshow(warn=True)
         self._region_color = (255, 0, 255)
         self._region_thickness = 5
 
-    def set_args(self, classes_names, reg_pts, count_reg_color=(255, 0, 255), count_txt_color=(0, 0, 0),
-                 count_bg_color=(255, 255, 255), line_thickness=2, track_thickness=2, view_img=False,
-                 view_in_counts=True, view_out_counts=True, draw_tracks=False, track_color=None, region_thickness=5,
-                 line_dist_thresh=15, cls_txtdisplay_gap=50):
+    def set_args(
+            self,
+            classes_names: List[str],
+            reg_pts: List[Tuple[int, int]],
+            count_reg_color: Tuple[int, int, int] = (255, 0, 255),
+            count_txt_color: Tuple[int, int, int] = (0, 0, 0),
+            count_bg_color: Tuple[int, int, int] = (255, 255, 255),
+            line_thickness: int = 2,
+            track_thickness: int = 2,
+            view_img: bool = False,
+            view_in_counts: bool = True,
+            view_out_counts: bool = True,
+            track_color: Tuple[int, int, int] = None,
+            region_thickness: int = 5,
+            line_dist_thresh: int = 15,
+            cls_txtdisplay_gap: int = 50,
+    ):
         """Configures the Counter's image, bounding box line thickness, and counting region points."""
         self._tf = line_thickness
         self._view_img = view_img
         self._view_in_counts = view_in_counts
         self._view_out_counts = view_out_counts
         self._track_thickness = track_thickness
-        self._draw_tracks = draw_tracks
         if len(reg_pts) == 2:
             logger.info("Line Counter Initiated.")
             self._reg_pts = reg_pts
@@ -84,39 +94,36 @@ class ObjectCounter:
             clss = tracks[0].boxes.cls.cpu().tolist()
             track_ids = tracks[0].boxes.id.int().cpu().tolist()
             for box, track_id, cls in zip(boxes, track_ids, clss):
-                self._annotator.box_label(box, label=f"{self._names[cls]}#{track_id}",
-                                          color=colors(int(track_id), True))
+                box_center = Point(((box[0] + box[2]) / 2, (box[1] + box[3]) / 2))
+                self._annotator.box_label(
+                    box, label=f"{self._names[cls]}#{track_id}", color=colors(int(track_id), True)
+                )
                 if self._names[cls] not in self._class_wise_count:
                     if len(self._names[cls]) > 5:
                         self._names[cls] = self._names[cls][:5]
                     self._class_wise_count[self._names[cls]] = {"in": 0, "out": 0}
-                track_line = self._track_history[track_id]
-                track_line.append((float((box[0] + box[2]) / 2), float((box[1] + box[3]) / 2)))
-                if len(track_line) > 30:
-                    track_line.pop(0)
-                if self._draw_tracks:
-                    self._annotator.draw_centroid_and_tracks(
-                        track_line,
-                        color=self._track_color if self._track_color else colors(int(track_id), True),
-                        track_thickness=self._track_thickness,
-                    )
-                prev_position = self._track_history[track_id][-2] if len(self._track_history[track_id]) > 1 else None
+                self._track_history[track_id].append(box_center)
+                if len(self._track_history[track_id]) > 30:
+                    self._track_history[track_id].pop(0)
+                prev_position = (self._track_history[track_id][-2] if len(self._track_history[track_id]) > 1 else None)
                 if len(self._reg_pts) >= 3:
-                    is_inside = self._counting_region.contains(Point(track_line[-1]))
-                    if prev_position is not None and is_inside and track_id not in self._count_ids:
-                        self._count_ids.append(track_id)
-                        if (box[0] - prev_position[0]) * (self._counting_region.centroid.x - prev_position[0]) > 0:
-                            self._in_counts += 1
-                            self._class_wise_count[self._names[cls]]["in"] += 1
-                        else:
+                    if prev_position is not None and track_id not in self._count_ids:
+                        if self._counting_region.contains(box_center):
+                            self._count_ids.append(track_id)
+                            if not self._counting_region.contains(prev_position):
+                                self._in_counts += 1
+                                self._class_wise_count[self._names[cls]]["in"] += 1
+                        elif (not self._counting_region.contains(box_center)
+                              and self._counting_region.contains(prev_position)):
+                            self._count_ids.append(track_id)
                             self._out_counts += 1
                             self._class_wise_count[self._names[cls]]["out"] += 1
                 elif len(self._reg_pts) == 2:
                     if prev_position is not None and track_id not in self._count_ids:
-                        distance = Point(track_line[-1]).distance(self._counting_region)
-                        if distance < self._line_dist_thresh and track_id not in self._count_ids:
+                        if box_center.distance(self._counting_region) < self._line_dist_thresh:
                             self._count_ids.append(track_id)
-                            if (box[0] - prev_position[0]) * (self._counting_region.centroid.x - prev_position[0]) > 0:
+                            if ((box_center.x - prev_position.x) *
+                                    (self._counting_region.centroid.x - prev_position.x) > 0):
                                 self._in_counts += 1
                                 self._class_wise_count[self._names[cls]]["in"] += 1
                             else:
@@ -170,7 +177,8 @@ class ObjectCounter:
     def get_class_wise_count(self) -> dict:
         """Returns a dictionary containing the class-wise counts for objects entering and exiting the region.
 
-        Returns: dict: A dictionary where keys are class names (strings) and values are dictionaries with "in" and
-        "out" counts (integers).
+        Returns:
+            dict: A dictionary where keys are class names (strings) and values are dictionaries with "in" and
+            "out" counts (integers).
         """
         return self._class_wise_count.copy()
