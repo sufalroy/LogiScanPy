@@ -88,24 +88,29 @@ class ObjectCounter:
     def _extract_and_process_tracks(self, tracks):
         """Extracts and processes tracks for object counting in a video stream."""
         self._annotator = Annotator(self._im0, self._tf, self._names)
+
         self._annotator.draw_region(reg_pts=self._reg_pts, color=self._region_color, thickness=self._region_thickness)
+
         if tracks[0].boxes.id is not None:
             boxes = tracks[0].boxes.xyxy.cpu()
             clss = tracks[0].boxes.cls.cpu().tolist()
             track_ids = tracks[0].boxes.id.int().cpu().tolist()
+
             for box, track_id, cls in zip(boxes, track_ids, clss):
                 box_center = Point(((box[0] + box[2]) / 2, (box[1] + box[3]) / 2))
-                self._annotator.box_label(
-                    box, label=f"{self._names[cls]}#{track_id}", color=colors(int(track_id), True)
-                )
+                self._annotator.box_label(box, label=f"{self._names[cls]}#{track_id}", color=colors(int(track_id), True))
+
                 if self._names[cls] not in self._class_wise_count:
                     if len(self._names[cls]) > 5:
                         self._names[cls] = self._names[cls][:5]
                     self._class_wise_count[self._names[cls]] = {"in": 0, "out": 0}
+
                 self._track_history[track_id].append(box_center)
                 if len(self._track_history[track_id]) > 30:
                     self._track_history[track_id].pop(0)
+
                 prev_position = (self._track_history[track_id][-2] if len(self._track_history[track_id]) > 1 else None)
+
                 if len(self._reg_pts) >= 3:
                     if prev_position is not None and track_id not in self._count_ids:
                         if self._counting_region.contains(box_center):
@@ -118,6 +123,7 @@ class ObjectCounter:
                             self._count_ids.append(track_id)
                             self._out_counts += 1
                             self._class_wise_count[self._names[cls]]["out"] += 1
+
                 elif len(self._reg_pts) == 2:
                     if prev_position is not None and track_id not in self._count_ids:
                         if box_center.distance(self._counting_region) < self._line_dist_thresh:
@@ -131,6 +137,7 @@ class ObjectCounter:
                                 self._class_wise_count[self._names[cls]]["out"] += 1
 
         label = "LogiScan Analytics \t"
+
         for key, value in self._class_wise_count.items():
             if value["in"] != 0 or value["out"] != 0:
                 if not self._view_in_counts and not self._view_out_counts:
@@ -144,6 +151,7 @@ class ObjectCounter:
 
         label = label.rstrip()
         label = label.split("\t")
+
         if label is not None:
             self._annotator.display_counts(
                 counts=label,
