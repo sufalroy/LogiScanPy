@@ -91,14 +91,19 @@ class ObjectCounter:
 
         self._annotator.draw_region(reg_pts=self._reg_pts, color=self._region_color, thickness=self._region_thickness)
 
-        if tracks[0].boxes.id is not None:
+        if tracks[0].boxes.id is not None and tracks[0].masks is not None:
+            masks = tracks[0].masks.xy
             boxes = tracks[0].boxes.xyxy.cpu()
             clss = tracks[0].boxes.cls.cpu().tolist()
             track_ids = tracks[0].boxes.id.int().cpu().tolist()
 
-            for box, track_id, cls in zip(boxes, track_ids, clss):
+            for box, mask, track_id, cls in zip(boxes, masks, track_ids, clss):
                 box_center = Point(((box[0] + box[2]) / 2, (box[1] + box[3]) / 2))
-                self._annotator.box_label(box, label=f"{self._names[cls]}#{track_id}", color=colors(int(track_id), True))
+                self._annotator.seg_bbox(
+                    mask,
+                    track_label=f"{self._names[cls]}#{track_id}",
+                    mask_color=colors(int(track_id), True)
+                )
 
                 if self._names[cls] not in self._class_wise_count:
                     if len(self._names[cls]) > 5:
@@ -168,7 +173,13 @@ class ObjectCounter:
                 return
 
     def start_counting(self, im0, tracks):
-        """Main function to start the object counting process."""
+        """
+        Main function to start the object counting process.
+
+        Args:
+            im0 (ndarray): Current frame from the video stream.
+            tracks (list): List of tracks obtained from the object tracking process.
+        """
         self._im0 = im0
         self._extract_and_process_tracks(tracks)
         if self._view_img:
