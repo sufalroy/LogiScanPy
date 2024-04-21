@@ -86,7 +86,11 @@ class ObjectCounter:
         self._cls_txtdisplay_gap = cls_txtdisplay_gap
 
     def _extract_and_process_tracks(self, tracks):
-        """Extracts and processes tracks for object counting in a video stream."""
+        """Extracts and processes tracks for object counting in a video stream.
+
+            Args:
+            tracks (list): List of tracks obtained from the object tracking process.
+        """
         self._annotator = Annotator(self._im0, self._tf, self._names)
 
         self._annotator.draw_region(reg_pts=self._reg_pts, color=self._region_color, thickness=self._region_thickness)
@@ -123,8 +127,7 @@ class ObjectCounter:
                             if not self._counting_region.contains(prev_position):
                                 self._in_counts += 1
                                 self._class_wise_count[self._names[cls]]["in"] += 1
-                        elif (not self._counting_region.contains(box_center)
-                              and self._counting_region.contains(prev_position)):
+                        elif self._counting_region.contains(prev_position):
                             self._count_ids.append(track_id)
                             self._out_counts += 1
                             self._class_wise_count[self._names[cls]]["out"] += 1
