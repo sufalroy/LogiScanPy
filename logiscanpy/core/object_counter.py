@@ -73,18 +73,21 @@ class ObjectCounter:
                     mask_color=colors(int(track_id), True)
                 )
 
-                self._class_wise_count.setdefault(self._names[cls], 0)
+                if self._names[cls] not in self._class_wise_count:
+                    self._class_wise_count[self._names[cls]] = 0
 
                 self._track_history[track_id].append(box_center)
-                self._track_history[track_id] = self._track_history[track_id][-30:]
+                if len(self._track_history[track_id]) > 30:
+                    self._track_history[track_id].pop(0)
 
                 prev_position = self._track_history[track_id][-2] if len(self._track_history[track_id]) > 1 else None
 
                 if prev_position is not None and track_id not in self._count_ids:
-                    if self._counting_region.contains(box_center) and not self._counting_region.contains(prev_position):
+                    if self._counting_region.contains(box_center):
                         self._count_ids.append(track_id)
-                        self._in_counts += 1
-                        self._class_wise_count[self._names[cls]] += 1
+                        if not self._counting_region.contains(prev_position):
+                            self._in_counts += 1
+                            self._class_wise_count[self._names[cls]] += 1
 
             label = "LogiScan Analytics \t"
             label_parts = [f"{str.capitalize(key)}: IN {value} \t" for key, value in self._class_wise_count.items() if
