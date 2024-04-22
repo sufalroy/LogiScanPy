@@ -4,7 +4,7 @@ from typing import Dict
 import cv2
 from ultralytics import YOLO
 
-from logiscanpy.core import object_counter
+from logiscanpy.core.object_counter import ObjectCounter
 from logiscanpy.utility.calibration import calibrate_region
 from logiscanpy.utility.publisher import Publisher
 from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
@@ -37,11 +37,11 @@ class LogiScanPy:
         self.model = YOLO(self.config["weights"])
 
         logger.debug("Opening video source: %s", self.config["video"])
-
-        if self.config["rtsp"]:
-            self.video_capture = RtspVideoCapture(self.config["video"])
-        else:
-            self.video_capture = VideoCapture(self.config["video"])
+        self.video_capture = (
+            RtspVideoCapture(self.config["video"])
+            if self.config["rtsp"]
+            else VideoCapture(self.config["video"])
+        )
 
         if not self.video_capture.is_opened():
             logger.error("Failed to open video source: %s", self.config["video"])
@@ -56,9 +56,7 @@ class LogiScanPy:
                 TARGET_RESOLUTION,
             )
 
-        logger.debug("Reading first frame from video source")
         frame = self.video_capture.read()
-
         if frame is None:
             logger.error("Failed to read first frame from video source")
             return False
@@ -69,13 +67,11 @@ class LogiScanPy:
         polygon_vertices = calibrate_region(frame)
 
         logger.debug("Initializing object counter")
-        self.object_counter = object_counter.ObjectCounter()
+        self.object_counter = ObjectCounter()
         self.object_counter.set_args(
             view_img=self.config["show"],
             reg_pts=polygon_vertices,
-            count_reg_color=(0, 0, 255),
             classes_names=self.model.names,
-            line_thickness=2,
         )
 
         logger.debug("Initializing publisher")
@@ -87,20 +83,15 @@ class LogiScanPy:
     def run(self) -> None:
         """Run the object detection and counting process."""
         logger.info("Starting video processing...")
-
         previous_counts: Dict[str, int] = {}
 
         while True:
-            logger.debug("Reading frame from video source")
             frame = self.video_capture.read()
             if frame is None:
                 logger.info("Video frame is empty or video processing has been successfully completed.")
                 break
 
-            logger.debug("Resizing frame to target resolution: %s", TARGET_RESOLUTION)
             frame = cv2.resize(frame, TARGET_RESOLUTION)
-
-            logger.debug("Running object detection and tracking")
             tracks = self.model.track(
                 frame,
                 persist=True,
@@ -111,14 +102,10 @@ class LogiScanPy:
                 tracker="bytetrack.yaml",
             )
 
-            logger.debug("Counting objects in the frame")
             frame = self.object_counter.start_counting(frame, tracks)
-
-            logger.debug("Publishing object counts")
             self.publish_counts(previous_counts)
 
             if self.config["save"]:
-                logger.debug("Writing frame to output video file")
                 self.video_writer.write(frame)
 
     def publish_counts(self, previous_counts: Dict[str, int]) -> None:
@@ -127,8 +114,8 @@ class LogiScanPy:
         Args:
             previous_counts (Dict[str, int]): Previous object counts.
         """
-        for class_name, class_wise_counts in self.object_counter.get_class_wise_count().items():
-            count = class_wise_counts["in"]
+        class_wise_count = self.object_counter.get_class_wise_count()
+        for class_name, count in class_wise_count.items():
             if class_name not in previous_counts or count > previous_counts[class_name]:
                 logger.debug("Publishing count for %s: %d", class_name, count)
                 self.publisher.publish_message(class_name, count)
@@ -138,17 +125,12 @@ class LogiScanPy:
         """Clean up resources."""
         logger.info("Cleaning up resources...")
 
-        logger.debug("Releasing video capture resource")
         self.video_capture.release()
 
         if self.config["save"]:
-            logger.debug("Releasing video writer resource")
             self.video_writer.release()
 
-        logger.debug("Destroying OpenCV windows")
         cv2.destroyAllWindows()
-
-        logger.debug("Closing publisher connection")
         self.publisher.close_connection()
 
         logger.info("Cleanup completed successfully")
