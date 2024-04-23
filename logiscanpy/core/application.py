@@ -11,7 +11,7 @@ from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 
 logger = logging.getLogger(__name__)
 
-TARGET_RESOLUTION = (640, 480)
+TARGET_RESOLUTION = (640, 640)
 
 
 class LogiScanPy:
