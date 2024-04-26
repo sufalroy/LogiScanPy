@@ -1,5 +1,4 @@
 import logging
-import time
 from typing import Dict
 
 import cv2
@@ -13,7 +12,6 @@ from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 logger = logging.getLogger(__name__)
 
 TARGET_RESOLUTION = (640, 640)
-RESET_INTERVAL_MINUTES = 10
 
 
 class LogiScanPy:
@@ -27,8 +25,6 @@ class LogiScanPy:
         self.object_counter = None
         self.publisher = None
         self._window_name = "LogiScan.v.0.1.0"
-        self._last_reset_time = time.time()
-        self._reset_interval = RESET_INTERVAL_MINUTES * 60
 
     def initialize(self) -> bool:
         """Initialize the LogiScanPy instance.
@@ -120,15 +116,6 @@ class LogiScanPy:
                     break
                 elif key == ord("r"):
                     self.reset_counts(previous_counts)
-
-            self.check_and_reset_counts(previous_counts)
-
-    def check_and_reset_counts(self, previous_counts: Dict[str, int]) -> None:
-        """Check if the reset interval has elapsed and reset counts if necessary."""
-        current_time = time.time()
-        if current_time - self._last_reset_time >= self._reset_interval:
-            self.reset_counts(previous_counts)
-            self._last_reset_time = current_time
 
     def reset_counts(self, previous_counts: Dict[str, int]) -> None:
         """Reset the object counts."""
