@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Dict
 
 import cv2
@@ -12,6 +13,7 @@ from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 logger = logging.getLogger(__name__)
 
 TARGET_RESOLUTION = (640, 640)
+RESET_INTERVAL_MINUTES = 10
 
 
 class LogiScanPy:
@@ -25,6 +27,8 @@ class LogiScanPy:
         self.object_counter = None
         self.publisher = None
         self._window_name = "LogiScan.v.0.1.0"
+        self._last_reset_time = time.time()
+        self._reset_interval = RESET_INTERVAL_MINUTES * 60
 
     def initialize(self) -> bool:
         """Initialize the LogiScanPy instance.
@@ -40,7 +44,7 @@ class LogiScanPy:
         logger.debug("Opening video source: %s", self.config["video"])
         self.video_capture = (
             RtspVideoCapture(self.config["video"])
-            if self.config["rtsp"]
+            if self.config.get("rtsp", False)
             else VideoCapture(self.config["video"])
         )
 
@@ -48,7 +52,7 @@ class LogiScanPy:
             logger.error("Failed to open video source: %s", self.config["video"])
             return False
 
-        if self.config["save"]:
+        if self.config.get("save", False):
             logger.debug("Creating output video file: %s", self.config["output"])
             self.video_writer = cv2.VideoWriter(
                 self.config["output"],
@@ -96,23 +100,41 @@ class LogiScanPy:
                 frame,
                 persist=True,
                 show=False,
-                classes=[self.config["class_id"]],
+                classes=[self.config.get("class_id", 0)],
                 verbose=False,
-                conf=self.config["confidence"],
+                conf=self.config.get("confidence", 0.5),
                 tracker="bytetrack.yaml",
             )
 
             frame = self.object_counter.start_counting(frame, tracks)
             self.publish_counts(previous_counts)
 
-            if self.config["save"]:
+            if self.config.get("save", False):
                 self.video_writer.write(frame)
 
-            if self.config["show"]:
+            if self.config.get("show", False):
                 cv2.namedWindow(self._window_name)
                 cv2.imshow(self._window_name, frame)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("q"):
                     break
+                elif key == ord("r"):
+                    self.reset_counts(previous_counts)
+
+            self.check_and_reset_counts(previous_counts)
+
+    def check_and_reset_counts(self, previous_counts: Dict[str, int]) -> None:
+        """Check if the reset interval has elapsed and reset counts if necessary."""
+        current_time = time.time()
+        if current_time - self._last_reset_time >= self._reset_interval:
+            self.reset_counts(previous_counts)
+            self._last_reset_time = current_time
+
+    def reset_counts(self, previous_counts: Dict[str, int]) -> None:
+        """Reset the object counts."""
+        logger.info("Resetting object counts")
+        self.object_counter.reset_counts()
+        previous_counts.clear()
 
     def publish_counts(self, previous_counts: Dict[str, int]) -> None:
         """Publish object counts to a message broker.
@@ -133,7 +155,7 @@ class LogiScanPy:
 
         self.video_capture.release()
 
-        if self.config["save"]:
+        if self.config.get("save", False):
             self.video_writer.release()
 
         cv2.destroyAllWindows()
