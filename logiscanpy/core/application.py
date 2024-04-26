@@ -24,6 +24,7 @@ class LogiScanPy:
         self.video_writer = None
         self.object_counter = None
         self.publisher = None
+        self._window_name = "LogiScan.v.0.1.0"
 
     def initialize(self) -> bool:
         """Initialize the LogiScanPy instance.
@@ -69,7 +70,6 @@ class LogiScanPy:
         logger.debug("Initializing object counter")
         self.object_counter = ObjectCounter()
         self.object_counter.set_args(
-            view_img=self.config["show"],
             reg_pts=polygon_vertices,
             classes_names=self.model.names,
         )
@@ -107,6 +107,12 @@ class LogiScanPy:
 
             if self.config["save"]:
                 self.video_writer.write(frame)
+
+            if self.config["show"]:
+                cv2.namedWindow(self._window_name)
+                cv2.imshow(self._window_name, frame)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
 
     def publish_counts(self, previous_counts: Dict[str, int]) -> None:
         """Publish object counts to a message broker.
