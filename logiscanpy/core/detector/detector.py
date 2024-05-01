@@ -65,7 +65,8 @@ class YOLOv8Seg:
             pad: Tuple[float, float],
             conf_threshold: float,
             iou_threshold: float,
-            nm: int = 32
+            nm: int = 32,
+            target_class_id: int = None,
     ) -> Tuple[List[np.ndarray], List[np.ndarray], np.ndarray]:
         """Postprocess the model predictions.
 
@@ -77,6 +78,7 @@ class YOLOv8Seg:
             conf_threshold (float): conf threshold.
             iou_threshold (float): iou threshold.
             nm (int): the number of masks.
+            target_class_id (int, optional): The class ID to detect. If None, all classes are detected.
 
         Returns:
             Tuple[List[np.ndarray], List[List[np.ndarray]], np.ndarray]:
@@ -91,15 +93,24 @@ class YOLOv8Seg:
         x = x[cv2.dnn.NMSBoxes(x[:, :4], x[:, 4], conf_threshold, iou_threshold)]
 
         if len(x) > 0:
-            x[..., [0, 1]] -= x[..., [2, 3]] / 2
-            x[..., [2, 3]] += x[..., [0, 1]]
-            x[..., :4] -= [pad[0], pad[1], pad[0], pad[1]]
-            x[..., :4] /= min(ratio)
-            x[..., [0, 2]] = x[:, [0, 2]].clip(0, im0.shape[1])
-            x[..., [1, 3]] = x[:, [1, 3]].clip(0, im0.shape[0])
-            masks = self._process_mask(protos[0], x[:, 6:], x[:, :4], im0.shape)
-            segments = self._masks2segments(masks)
-            return x[..., :6].tolist(), segments, masks
+            if target_class_id is not None:
+                x = x[x[:, 5] == target_class_id]
+
+            if len(x) > 0:
+                x[..., [0, 1]] -= x[..., [2, 3]] / 2
+                x[..., [2, 3]] += x[..., [0, 1]]
+                x[..., :4] -= [pad[0], pad[1], pad[0], pad[1]]
+                x[..., :4] /= min(ratio)
+                x[..., [0, 2]] = x[:, [0, 2]].clip(0, im0.shape[1])
+                x[..., [1, 3]] = x[:, [1, 3]].clip(0, im0.shape[0])
+                masks = self._process_mask(protos[0], x[:, 6:], x[:, :4], im0.shape)
+                segments = self._masks2segments(masks)
+                return x[..., :6].tolist(), segments, masks
+            else:
+                empty_boxes: List[np.ndarray] = []
+                empty_segments: List[np.ndarray] = []
+                empty_masks: np.ndarray = np.array([])
+                return empty_boxes, empty_segments, empty_masks
         else:
             empty_boxes: List[np.ndarray] = []
             empty_segments: List[np.ndarray] = []
@@ -111,7 +122,8 @@ class YOLOv8Seg:
             im0: np.ndarray,
             conf_threshold: float = 0.4,
             iou_threshold: float = 0.45,
-            nm: int = 32
+            nm: int = 32,
+            class_id: int = 0,
     ) -> Tuple[List[np.ndarray], List[np.ndarray], np.ndarray]:
         """Detect objects in the given image.
 
@@ -120,6 +132,7 @@ class YOLOv8Seg:
             conf_threshold (float): confidence threshold for filtering predictions.
             iou_threshold (float): iou threshold for NMS.
             nm (int): the number of masks.
+            class_id (int, optional): The class ID to detect. If None, all classes are detected.
 
         Returns:
             Tuple[List[np.ndarray], List[np.ndarray], np.ndarray]:
@@ -137,6 +150,7 @@ class YOLOv8Seg:
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             nm=nm,
+            target_class_id=class_id,
         )
         return boxes, segments, masks
 

@@ -1,29 +1,42 @@
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 import cv2
-from ultralytics import YOLO
+import numpy as np
 
-from logiscanpy.core.object_counter import ObjectCounter
+from logiscanpy.core.detector.detector import YOLOv8Seg
+from logiscanpy.core.solutions.object_counter import ObjectCounter
+from logiscanpy.core.tracker.tracker import ByteTrack
 from logiscanpy.utility.calibration import calibrate_region
 from logiscanpy.utility.publisher import Publisher
 from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 
-logger = logging.getLogger(__name__)
-
-TARGET_RESOLUTION = (640, 640)
+_LOGGER = logging.getLogger(__name__)
+_TARGET_RESOLUTION = (640, 640)
+_NAMES = [
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
+    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
+    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard",
+    "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase",
+    "scissors", "teddy bear", "hair drier", "toothbrush"
+]
 
 
 class LogiScanPy:
     """LogiScanPy class for object detection and counting."""
 
     def __init__(self, config: Dict[str, str]):
-        self.config = config
-        self.model = None
-        self.video_capture = None
-        self.video_writer = None
-        self.object_counter = None
-        self.publisher = None
+        self._config = config
+        self._model: Optional[YOLOv8Seg] = None
+        self._tracker: Optional[ByteTrack] = None
+        self._video_capture: Optional[VideoCapture] = None
+        self._video_writer: Optional[cv2.VideoWriter] = None
+        self._object_counter: Optional[ObjectCounter] = None
+        self._publisher: Optional[Publisher] = None
         self._window_name = "LogiScan.v.0.1.0"
 
     def initialize(self) -> bool:
@@ -32,130 +45,140 @@ class LogiScanPy:
         Returns:
             bool: True if initialization is successful, False otherwise.
         """
-        logger.info("Initializing LogiScanPy...")
+        _LOGGER.info("Initializing LogiScanPy...")
 
-        logger.debug("Loading YOLOv8 model: %s", self.config["weights"])
-        self.model = YOLO(self.config["weights"])
+        _LOGGER.debug("Loading YOLOv8 model: %s", self._config["weights"])
+        self._model = YOLOv8Seg(self._config["weights"])
 
-        logger.debug("Opening video source: %s", self.config["video"])
-        self.video_capture = (
-            RtspVideoCapture(self.config["video"])
-            if self.config.get("rtsp", False)
-            else VideoCapture(self.config["video"])
+        _LOGGER.debug("Initialize Tracker")
+        self._tracker = ByteTrack(
+            track_activation_threshold=0.25,
+            lost_track_buffer=30,
+            minimum_matching_threshold=0.8,
+            frame_rate=30,
+            minimum_consecutive_frames=1,
         )
 
-        if not self.video_capture.is_opened():
-            logger.error("Failed to open video source: %s", self.config["video"])
+        _LOGGER.debug("Opening video source: %s", self._config["video"])
+        self._video_capture = (
+            RtspVideoCapture(self._config["video"])
+            if self._config.get("rtsp", False)
+            else VideoCapture(self._config["video"])
+        )
+
+        if not self._video_capture.is_opened():
+            _LOGGER.error("Failed to open video source: %s", self._config["video"])
             return False
 
-        if self.config.get("save", False):
-            logger.debug("Creating output video file: %s", self.config["output"])
-            self.video_writer = cv2.VideoWriter(
-                self.config["output"],
+        if self._config.get("save", False):
+            _LOGGER.debug("Creating output video file: %s", self._config["output"])
+            self._video_writer = cv2.VideoWriter(
+                self._config["output"],
                 cv2.VideoWriter_fourcc(*"mp4v"),
                 30,
-                TARGET_RESOLUTION,
+                _TARGET_RESOLUTION,
             )
 
-        frame = self.video_capture.read()
+        frame = self._video_capture.read()
         if frame is None:
-            logger.error("Failed to read first frame from video source")
+            _LOGGER.error("Failed to read first frame from video source")
             return False
 
-        frame = cv2.resize(frame, TARGET_RESOLUTION)
+        frame = cv2.resize(frame, _TARGET_RESOLUTION)
 
-        logger.debug("Calibrating region of interest...")
+        _LOGGER.debug("Calibrating region of interest...")
         polygon_vertices = calibrate_region(frame)
 
-        logger.debug("Initializing object counter")
-        self.object_counter = ObjectCounter()
-        self.object_counter.set_args(
+        _LOGGER.debug("Initializing object counter")
+        self._object_counter = ObjectCounter()
+        self._object_counter.set_args(
             reg_pts=polygon_vertices,
-            classes_names=self.model.names,
+            classes_names=_NAMES
         )
 
-        logger.debug("Initializing publisher")
-        self.publisher = Publisher()
+        _LOGGER.debug("Initializing publisher")
+        self._publisher = Publisher()
 
-        logger.info("Initialization completed successfully")
+        _LOGGER.info("Initialization completed successfully")
         return True
+
+    def _reset_counts(self, previous_counts: Dict[str, int]) -> None:
+        """Reset the object counts."""
+        _LOGGER.info("Resetting object counts")
+        self._object_counter.reset_counts()
+        previous_counts.clear()
+
+    def _publish_counts(self, previous_counts: Dict[str, int]) -> None:
+        """Publish object counts to a message broker.
+
+        Args:
+            previous_counts (Dict[str, int]): Previous object counts.
+        """
+        class_wise_count = self._object_counter.get_class_wise_count()
+        for class_name, count in class_wise_count.items():
+            if class_name not in previous_counts or count > previous_counts[class_name]:
+                _LOGGER.debug("Publishing count for %s: %d", class_name, count)
+                self._publisher.publish_message(class_name, count)
+                previous_counts[class_name] = count
 
     def run(self) -> None:
         """Run the object detection and counting process."""
-        logger.info("Starting video processing...")
+        _LOGGER.info("Starting video processing...")
         previous_counts: Dict[str, int] = {}
 
         while True:
-            frame = self.video_capture.read()
+            frame = self._video_capture.read()
             if frame is None:
-                logger.info("Video frame is empty or video processing has been successfully completed.")
+                _LOGGER.info(
+                    "Video frame is empty or video processing has been successfully completed."
+                )
                 break
 
-            frame = cv2.resize(frame, TARGET_RESOLUTION)
-            tracks = self.model.track(
-                frame,
-                persist=True,
-                show=False,
-                classes=[self.config.get("class_id", 0)],
-                verbose=False,
-                conf=self.config.get("confidence", 0.5),
-                tracker="bytetrack.yaml",
-            )
+            frame = cv2.resize(frame, _TARGET_RESOLUTION)
+            boxes, _, masks = self._model.detect(frame, class_id=int(self._config["class_id"]))
+            boxes = np.array(boxes)
 
-            frame = self.object_counter.start_counting(frame, tracks)
-            self.publish_counts(previous_counts)
+            class_ids = np.array([box[-1] for box in boxes])
+            scores = np.array([box[-2] for box in boxes])
+            boxes = np.array([box[:4] for box in boxes])
 
-            if self.config.get("save", False):
-                self.video_writer.write(frame)
+            tracks = self._tracker.update_with_detections(boxes, scores, class_ids)
 
-            if self.config.get("show", False):
+            frame = self._object_counter.start_counting(frame, tracks)
+            self._publish_counts(previous_counts)
+
+            if self._config.get("save", False):
+                self._video_writer.write(frame)
+
+            if self._config.get("show", False):
                 cv2.namedWindow(self._window_name)
                 cv2.imshow(self._window_name, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     break
                 elif key == ord("r"):
-                    self.reset_counts(previous_counts)
-
-    def reset_counts(self, previous_counts: Dict[str, int]) -> None:
-        """Reset the object counts."""
-        logger.info("Resetting object counts")
-        self.object_counter.reset_counts()
-        previous_counts.clear()
-
-    def publish_counts(self, previous_counts: Dict[str, int]) -> None:
-        """Publish object counts to a message broker.
-
-        Args:
-            previous_counts (Dict[str, int]): Previous object counts.
-        """
-        class_wise_count = self.object_counter.get_class_wise_count()
-        for class_name, count in class_wise_count.items():
-            if class_name not in previous_counts or count > previous_counts[class_name]:
-                logger.debug("Publishing count for %s: %d", class_name, count)
-                self.publisher.publish_message(class_name, count)
-                previous_counts[class_name] = count
+                    self._reset_counts(previous_counts)
 
     def cleanup(self) -> None:
         """Clean up resources."""
-        logger.info("Cleaning up resources...")
+        _LOGGER.info("Cleaning up resources...")
 
-        self.video_capture.release()
+        self._video_capture.release()
 
-        if self.config.get("save", False):
-            self.video_writer.release()
+        if self._config.get("save", False):
+            self._video_writer.release()
 
         cv2.destroyAllWindows()
-        self.publisher.close_connection()
+        self._publisher.close_connection()
 
-        logger.info("Cleanup completed successfully")
+        _LOGGER.info("Cleanup completed successfully")
 
     def run_app(self) -> None:
         """Run the LogiScanPy application."""
-        logger.info("Starting LogiScanPy application")
+        _LOGGER.info("Starting LogiScanPy application")
 
         if not self.initialize():
-            logger.error("Initialization failed, exiting application")
+            _LOGGER.error("Initialization failed, exiting application")
             return
 
         try:
@@ -163,4 +186,4 @@ class LogiScanPy:
         finally:
             self.cleanup()
 
-        logger.info("LogiScanPy application completed successfully")
+        _LOGGER.info("LogiScanPy application completed successfully")
