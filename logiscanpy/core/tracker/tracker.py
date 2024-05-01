@@ -78,6 +78,7 @@ class STrack(BaseTrack):
         self.score = score
         self.class_ids = class_ids
         self.tracklet_len = 0
+        self.internal_track_id = 0
         self.external_track_id = -1
         self.minimum_consecutive_frames = minimum_consecutive_frames
 
@@ -106,7 +107,6 @@ class STrack(BaseTrack):
                 stracks[i].covariance = cov
 
     def activate(self, kalman_filter: KalmanFilter, frame_id: int):
-        """Start a new tracklet"""
         self.kalman_filter = kalman_filter
         self.internal_track_id = self.next_id()
         self.mean, self.covariance = self.kalman_filter.initiate(self.tlwh_to_xyah(self._tlwh))
@@ -222,6 +222,30 @@ class ByteTrack:
         BaseTrack.reset_counter()
         STrack.reset_external_counter()
 
+    def update_with_detections(self, boxes: np.ndarray, scores: np.ndarray, class_ids: np.ndarray) -> np.ndarray:
+        if len(boxes) == 0:
+            return np.empty((0, 6), dtype=np.float32)
+
+        tensors = self._convert_detections_to_tensors(boxes, scores, class_ids)
+        tracks = self.update_with_tensors(tensors=tensors)
+        if len(tracks) > 0:
+            detection_bounding_boxes = tensors[:, :4]
+            track_bounding_boxes = np.asarray([track.tlbr for track in tracks])
+
+            ious = matching.box_iou_batch(detection_bounding_boxes, track_bounding_boxes)
+            iou_costs = 1 - ious
+
+            matches, _, _ = matching.linear_assignment(iou_costs, 0.5)
+
+            tracked_detections = np.zeros((len(matches), 6), dtype=np.float32)
+            tracked_detections[:, :4] = detection_bounding_boxes[matches[:, 0]]
+            tracked_detections[:, 4] = class_ids[matches[:, 0]]
+            tracked_detections[:, 5] = np.array([int(tracks[i_track].external_track_id) for _, i_track in matches])
+
+            return tracked_detections
+        else:
+            return np.empty((0, 6), dtype=np.float32)
+
     def update_with_tensors(self, tensors: np.ndarray) -> List[STrack]:
         self.frame_id += 1
         activated_stracks: List[STrack] = []
@@ -242,13 +266,9 @@ class ByteTrack:
         class_ids_keep = class_ids[remain_inds]
         class_ids_second = class_ids[inds_second]
 
-        if len(dets) > 0:
-            detections = [
-                STrack(STrack.tlbr_to_tlwh(tlbr), s, c, self.minimum_consecutive_frames)
-                for (tlbr, s, c) in zip(dets, scores_keep, class_ids_keep)
-            ]
-        else:
-            detections = []
+        detections = self._create_detections(dets, scores_keep, class_ids_keep, self.minimum_consecutive_frames)
+        detections_second = self._create_detections(dets_second, scores_second, class_ids_second,
+                                                    self.minimum_consecutive_frames)
 
         unconfirmed: List[STrack] = []
         tracked_stracks: List[STrack] = []
@@ -259,7 +279,7 @@ class ByteTrack:
             else:
                 tracked_stracks.append(track)
 
-        strack_pool = self.joint_tracks(tracked_stracks, self.lost_tracks)
+        strack_pool = self._joint_tracks(tracked_stracks, self.lost_tracks)
         STrack.multi_predict(strack_pool)
         dists = matching.iou_distance(strack_pool, detections)
         dists = matching.fuse_score(dists, detections)
@@ -274,14 +294,6 @@ class ByteTrack:
             else:
                 track.re_activate(det, self.frame_id, new_id=False)
                 refind_stracks.append(track)
-
-        if len(dets_second) > 0:
-            detections_second = [
-                STrack(STrack.tlbr_to_tlwh(tlbr), s, c, self.minimum_consecutive_frames)
-                for (tlbr, s, c) in zip(dets_second, scores_second, class_ids_second)
-            ]
-        else:
-            detections_second = []
 
         r_tracked_stracks = [strack_pool[i] for i in u_track if strack_pool[i].state == TrackState.TRACKED]
         dists = matching.iou_distance(r_tracked_stracks, detections_second)
@@ -330,18 +342,33 @@ class ByteTrack:
                 removed_stracks.append(track)
 
         self.tracked_tracks = [t for t in self.tracked_tracks if t.state == TrackState.TRACKED]
-        self.tracked_tracks = self.joint_tracks(self.tracked_tracks, activated_stracks)
-        self.tracked_tracks = self.joint_tracks(self.tracked_tracks, refind_stracks)
-        self.lost_tracks = self.sub_tracks(self.lost_tracks, self.tracked_tracks)
+        self.tracked_tracks = self._joint_tracks(self.tracked_tracks, activated_stracks)
+        self.tracked_tracks = self._joint_tracks(self.tracked_tracks, refind_stracks)
+        self.lost_tracks = self._sub_tracks(self.lost_tracks, self.tracked_tracks)
         self.lost_tracks.extend(lost_stracks)
-        self.lost_tracks = self.sub_tracks(self.lost_tracks, self.removed_tracks)
+        self.lost_tracks = self._sub_tracks(self.lost_tracks, self.removed_tracks)
         self.removed_tracks.extend(removed_stracks)
-        self.tracked_tracks, self.lost_tracks = self.remove_duplicate_tracks(self.tracked_tracks, self.lost_tracks)
+        self.tracked_tracks, self.lost_tracks = self._remove_duplicate_tracks(self.tracked_tracks, self.lost_tracks)
         output_stracks = [track for track in self.tracked_tracks if track.is_activated]
         return output_stracks
 
     @staticmethod
-    def joint_tracks(track_list_a: List[STrack], track_list_b: List[STrack]) -> List[STrack]:
+    def _convert_detections_to_tensors(boxes: np.ndarray, scores: np.ndarray, class_ids: np.ndarray) -> np.ndarray:
+        return np.hstack((boxes, scores[:, np.newaxis], class_ids[:, np.newaxis]))
+
+    @staticmethod
+    def _create_detections(dets: np.ndarray, scores: np.ndarray, class_ids: np.ndarray,
+                           minimum_consecutive_frames: int) -> List[STrack]:
+        detections = []
+        if len(dets) > 0:
+            detections = [
+                STrack(STrack.tlbr_to_tlwh(tlbr), s, c, minimum_consecutive_frames)
+                for tlbr, s, c in zip(dets, scores, class_ids)
+            ]
+        return detections
+
+    @staticmethod
+    def _joint_tracks(track_list_a: List[STrack], track_list_b: List[STrack]) -> List[STrack]:
         seen_track_ids = set()
         result = []
         for track in track_list_a + track_list_b:
@@ -351,7 +378,7 @@ class ByteTrack:
         return result
 
     @staticmethod
-    def sub_tracks(track_list_a: List, track_list_b: List) -> List[int]:
+    def _sub_tracks(track_list_a: List, track_list_b: List) -> List[int]:
         tracks = {track.internal_track_id: track for track in track_list_a}
         track_ids_b = {track.internal_track_id for track in track_list_b}
         for track_id in track_ids_b:
@@ -359,7 +386,7 @@ class ByteTrack:
         return list(tracks.values())
 
     @staticmethod
-    def remove_duplicate_tracks(tracks_a: List, tracks_b: List) -> Tuple[List, List]:
+    def _remove_duplicate_tracks(tracks_a: List, tracks_b: List) -> Tuple[List, List]:
         pairwise_distance = matching.iou_distance(tracks_a, tracks_b)
         matching_pairs = np.where(pairwise_distance < 0.15)
         duplicates_a, duplicates_b = set(), set()
