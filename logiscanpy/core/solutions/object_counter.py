@@ -84,17 +84,26 @@ class ObjectCounter:
 
             label = f"{self._names[class_id]}#{track_id}"
             cv2.rectangle(im0, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            cv2.putText(im0, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 2)
+            cv2.putText(im0, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-        label = "LogiScan Analytics \t"
-        label_parts = [
-            f"{str.capitalize(key)}: IN {value} \t"
+        label = [
+            f"{str.capitalize(key)}: IN {value}"
             for key, value in self._class_wise_count.items()
             if value != 0
         ]
-        label += "".join(label_parts)
-        label = label.rstrip()
-        cv2.putText(im0, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+        label = "".join(label)
+        (label_width, label_height), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2
+        )
+        cv2.putText(
+            im0,
+            label,
+            (im0.shape[1] - label_width - 10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 255, 0),
+            2,
+        )
 
         return im0
 
