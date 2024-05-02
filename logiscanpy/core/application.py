@@ -76,9 +76,8 @@ class LogiScanPy:
             return False
 
         frame = cv2.resize(frame, _TARGET_RESOLUTION)
-
         _LOGGER.debug("Calibrating region of interest...")
-        polygon_vertices = calibrate_region(frame)
+        polygons = calibrate_region(frame)
 
         class_names_file = self._config.get("class_names_file")
         try:
@@ -90,7 +89,7 @@ class LogiScanPy:
         _LOGGER.debug("Initializing object counter")
         self._object_counter = ObjectCounter()
         self._object_counter.set_args(
-            reg_pts=polygon_vertices,
+            reg_pts=polygons,
             classes_names=_NAMES,
             debug=True
         )
