@@ -64,6 +64,11 @@ def read_config() -> Dict[str, str]:
         raise TypeError("The 'output' parameter must be a string.")
     app_config["output"] = output
 
+    class_names_file = config.get("app", "class_names_file", fallback=None)
+    if not isinstance(class_names_file, str):
+        raise TypeError("The 'class_names_file' parameter must be a string.")
+    app_config["class_names_file"] = class_names_file
+
     class_id = config.getint("app", "class_id", fallback=0)
     if not isinstance(class_id, int):
         raise TypeError("The 'class_id' parameter must be an integer.")

@@ -8,22 +8,13 @@ from logiscanpy.core.detector.detector import YOLOv8Seg
 from logiscanpy.core.solutions.object_counter import ObjectCounter
 from logiscanpy.core.tracker.tracker import ByteTrack
 from logiscanpy.utility.calibration import calibrate_region
+from logiscanpy.utility.config import load_class_names
 from logiscanpy.utility.publisher import Publisher
 from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 
 _LOGGER = logging.getLogger(__name__)
 _TARGET_RESOLUTION = (640, 640)
-_NAMES = [
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
-    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
-    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
-    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard",
-    "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase",
-    "scissors", "teddy bear", "hair drier", "toothbrush"
-]
+_DEFAULT_NAMES = load_class_names("../config/coco.yaml")
 
 
 class LogiScanPy:
@@ -89,11 +80,19 @@ class LogiScanPy:
         _LOGGER.debug("Calibrating region of interest...")
         polygon_vertices = calibrate_region(frame)
 
+        class_names_file = self._config.get("class_names_file")
+        try:
+            _NAMES = load_class_names(class_names_file)
+        except Exception as e:
+            _LOGGER.error(f"Error reading class names file: {e}")
+            _NAMES = _DEFAULT_NAMES
+
         _LOGGER.debug("Initializing object counter")
         self._object_counter = ObjectCounter()
         self._object_counter.set_args(
             reg_pts=polygon_vertices,
-            classes_names=_NAMES
+            classes_names=_NAMES,
+            debug=True
         )
 
         _LOGGER.debug("Initializing publisher")
