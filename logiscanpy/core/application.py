@@ -2,11 +2,9 @@ import logging
 from typing import Dict, Optional
 
 import cv2
-import numpy as np
 
-from logiscanpy.core.detector.detector import YOLOv8Seg
+from logiscanpy.core.pipeline import Pipeline
 from logiscanpy.core.solutions.object_counter import ObjectCounter
-from logiscanpy.core.tracker.tracker import ByteTrack
 from logiscanpy.utility.calibration import calibrate_region
 from logiscanpy.utility.config import load_class_names
 from logiscanpy.utility.publisher import Publisher
@@ -22,8 +20,7 @@ class LogiScanPy:
 
     def __init__(self, config: Dict[str, str]):
         self._config = config
-        self._model: Optional[YOLOv8Seg] = None
-        self._tracker: Optional[ByteTrack] = None
+        self._pipeline: Optional[Pipeline] = None
         self._video_capture: Optional[VideoCapture] = None
         self._video_writer: Optional[cv2.VideoWriter] = None
         self._object_counter: Optional[ObjectCounter] = None
@@ -38,17 +35,15 @@ class LogiScanPy:
         """
         _LOGGER.info("Initializing LogiScanPy...")
 
-        _LOGGER.debug("Loading YOLOv8 model: %s", self._config["weights"])
-        self._model = YOLOv8Seg(self._config["weights"])
-
-        _LOGGER.debug("Initialize Tracker")
-        self._tracker = ByteTrack(
-            track_activation_threshold=0.25,
-            lost_track_buffer=30,
-            minimum_matching_threshold=0.8,
-            frame_rate=30,
-            minimum_consecutive_frames=1,
+        _LOGGER.info("Initializing Detection and Tracking Pipeline")
+        self._pipeline = Pipeline(
+            onnx_model_path=self._config.get("weights"),
+            confidence_thres=float(self._config.get("confidence")),
+            iou_thres=0.45,
+            is_seg=bool(self._config.get("is_seg")),
+            target_class_id=int(self._config.get("class_id"))
         )
+        self._pipeline.start_processes()
 
         _LOGGER.debug("Opening video source: %s", self._config["video"])
         self._video_capture = (
@@ -133,14 +128,9 @@ class LogiScanPy:
                 break
 
             frame = cv2.resize(frame, _TARGET_RESOLUTION)
-            boxes, _, masks = self._model.detect(frame, class_id=int(self._config["class_id"]))
-            boxes = np.array(boxes)
 
-            class_ids = np.array([box[-1] for box in boxes])
-            scores = np.array([box[-2] for box in boxes])
-            boxes = np.array([box[:4] for box in boxes])
-
-            tracks = self._tracker.update_with_detections(boxes, scores, class_ids)
+            self._pipeline.put_frame(frame)
+            tracks = self._pipeline.get_tracked_detections()
 
             frame = self._object_counter.start_counting(frame, tracks)
             self._publish_counts(previous_counts)
@@ -160,15 +150,12 @@ class LogiScanPy:
     def cleanup(self) -> None:
         """Clean up resources."""
         _LOGGER.info("Cleaning up resources...")
-
         self._video_capture.release()
-
         if self._config.get("save", False):
             self._video_writer.release()
-
+        self._pipeline.stop_processes()
         cv2.destroyAllWindows()
         self._publisher.close_connection()
-
         _LOGGER.info("Cleanup completed successfully")
 
     def run_app(self) -> None:
