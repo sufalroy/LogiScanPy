@@ -54,13 +54,13 @@ class ObjectCounter:
         Returns:
             np.ndarray: Frame with annotations and counting results (if debug is True).
         """
-        if len(tracks) == 0:
-            return im0
-
         if self._debug:
             for region in self._counting_regions:
                 region_pts = np.array(region.exterior.coords, np.int32).reshape((-1, 1, 2))
                 cv2.polylines(im0, [region_pts], True, self._region_color, self._region_thickness)
+
+        if len(tracks) == 0:
+            return im0
 
         for detection in tracks:
             x1, y1, x2, y2, class_id, track_id = detection
