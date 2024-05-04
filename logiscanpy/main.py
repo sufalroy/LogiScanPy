@@ -94,6 +94,11 @@ def read_config() -> Dict[str, str]:
         raise TypeError("The 'save' parameter must be a boolean.")
     app_config["save"] = save
 
+    solution_type = config.get("app", "solution_type", fallback=None)
+    if not isinstance(solution_type, str):
+        raise TypeError("The 'solution_type' parameter must be a string.")
+    app_config["solution_type"] = solution_type
+
     return app_config
 
 

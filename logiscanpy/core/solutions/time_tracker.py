@@ -7,10 +7,12 @@ import cv2
 import numpy as np
 from shapely.geometry import Point, Polygon
 
+from logiscanpy.core.solutions import Solution
+
 _LOGGER = logging.getLogger(__name__)
 
 
-class TimeTracker:
+class TimeTracker(Solution):
     """A class to track the time spent by objects within multiple regions."""
 
     def __init__(self):
@@ -19,7 +21,7 @@ class TimeTracker:
             [(300, 300), (400, 300), (400, 400), (300, 400)]
         ]
         self._regions: List[Polygon] = [Polygon(self._reg_pts[0])]
-        self._class_names: List[str] = []
+        self._classes_names: List[str] = []
         self._times: Dict[int, Dict[str, float]] = defaultdict(dict)
         self._entry_times: Dict[int, Dict[int, float]] = defaultdict(lambda: defaultdict(float))
         self._region_color: Tuple[int, int, int] = (255, 0, 0)
@@ -27,12 +29,12 @@ class TimeTracker:
         self._debug: bool = True
 
     def set_params(
-            self, class_names: List[str], reg_pts: List[List[Tuple[int, int]]], debug: bool
+            self, classes_names: List[str], reg_pts: List[List[Tuple[int, int]]], debug: bool
     ):
         """Configures the TimeTracker instance's region points and class names.
 
         Args:
-            class_names (List[str]): List of class names.
+            classes_names (List[str]): List of class names.
             reg_pts (List[List[Tuple[int, int]]]): List of lists of region points.
             debug (bool): Whether to enable debug mode.
         """
@@ -42,10 +44,10 @@ class TimeTracker:
             _LOGGER.warning(
                 "Invalid Region points provided, region_points must be >= 3 for polygons."
             )
-        self._class_names = class_names
+        self._classes_names = classes_names
         self._debug = debug
 
-    def track_time(self, im0: np.ndarray, tracks: np.ndarray) -> np.ndarray:
+    def process_frame(self, im0: np.ndarray, tracks: np.ndarray) -> np.ndarray:
         """
         Main function to track the time spent by objects within the specified regions.
 
@@ -73,7 +75,7 @@ class TimeTracker:
             class_id, track_id = int(class_id), int(track_id)
 
             box_center = Point(((x1 + x2) / 2, (y1 + y2) / 2))
-            class_name = self._class_names[class_id]
+            class_name = self._classes_names[class_id]
 
             for region_idx, region in enumerate(self._regions):
                 if region.contains(box_center):

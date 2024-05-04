@@ -6,10 +6,12 @@ import cv2
 import numpy as np
 from shapely.geometry import Point, Polygon
 
+from logiscanpy.core.solutions import Solution
+
 _LOGGER = logging.getLogger(__name__)
 
 
-class ObjectCounter:
+class ObjectCounter(Solution):
     """A class to manage the counting of objects entering multiple regions."""
 
     def __init__(self):
@@ -25,7 +27,7 @@ class ObjectCounter:
         self._region_thickness: int = 2
         self._debug = True
 
-    def set_args(self, classes_names: List[str], reg_pts: List[List[Tuple[int, int]]], debug: bool):
+    def set_params(self, classes_names: List[str], reg_pts: List[List[Tuple[int, int]]], debug: bool):
         """Configures the Counter's counting region points and class names.
 
         Args:
@@ -42,7 +44,7 @@ class ObjectCounter:
         self._names = classes_names
         self._debug = debug
 
-    def start_counting(self, im0: np.ndarray, tracks: np.ndarray) -> np.ndarray:
+    def process_frame(self, im0: np.ndarray, tracks: np.ndarray) -> np.ndarray:
         """
         Main function to start the object counting process.
 

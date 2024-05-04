@@ -4,11 +4,10 @@ from typing import Dict, Optional
 import cv2
 
 from logiscanpy.core.pipeline import Pipeline
-from logiscanpy.core.solutions.object_counter import ObjectCounter
-from logiscanpy.core.solutions.time_tracker import TimeTracker
+from logiscanpy.core.solutions import Solution
+from logiscanpy.core.solutions.solution_factory import SolutionFactory
 from logiscanpy.utility.calibration import calibrate_region
 from logiscanpy.utility.config import load_class_names
-from logiscanpy.utility.publisher import Publisher
 from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,9 +23,7 @@ class LogiScanPy:
         self._pipeline: Optional[Pipeline] = None
         self._video_capture: Optional[VideoCapture] = None
         self._video_writer: Optional[cv2.VideoWriter] = None
-        # self._object_counter: Optional[ObjectCounter] = None
-        self._time_tracker: Optional[TimeTracker] = None
-        # self._publisher: Optional[Publisher] = None
+        self._solution: Optional[Solution] = None
         self._window_name = "LogiScan.v.0.1.0"
 
     def initialize(self) -> bool:
@@ -83,50 +80,20 @@ class LogiScanPy:
             _LOGGER.error(f"Error reading class names file: {e}")
             _NAMES = _DEFAULT_NAMES
 
-        # _LOGGER.debug("Initializing object counter")
-        # self._object_counter = ObjectCounter()
-        # self._object_counter.set_args(
-        #     reg_pts=polygons,
-        #     classes_names=_NAMES,
-        #     debug=True
-        # )
-
-        self._time_tracker = TimeTracker()
-        self._time_tracker.set_params(
+        _LOGGER.debug("Initializing solutions...")
+        self._solution = SolutionFactory.create_solution(self._config)
+        self._solution.set_params(
             reg_pts=polygons,
-            class_names=_NAMES,
+            classes_names=_NAMES,
             debug=True
         )
-
-        # _LOGGER.debug("Initializing publisher")
-        # self._publisher = Publisher()
 
         _LOGGER.info("Initialization completed successfully")
         return True
 
-    # def _reset_counts(self, previous_counts: Dict[str, int]) -> None:
-    #     """Reset the object counts."""
-    #     _LOGGER.info("Resetting object counts")
-    #     self._object_counter.reset_counts()
-    #     previous_counts.clear()
-
-    # def _publish_counts(self, previous_counts: Dict[str, int]) -> None:
-    #     """Publish object counts to a message broker.
-    #
-    #     Args:
-    #         previous_counts (Dict[str, int]): Previous object counts.
-    #     """
-    #     class_wise_count = self._object_counter.get_class_wise_count()
-    #     for class_name, count in class_wise_count.items():
-    #         if class_name not in previous_counts or count > previous_counts[class_name]:
-    #             _LOGGER.debug("Publishing count for %s: %d", class_name, count)
-    #             self._publisher.publish_message(class_name, count)
-    #             previous_counts[class_name] = count
-
     def run(self) -> None:
         """Run the object detection and counting process."""
         _LOGGER.info("Starting video processing...")
-        previous_counts: Dict[str, int] = {}
 
         while True:
             frame = self._video_capture.read()
@@ -141,10 +108,7 @@ class LogiScanPy:
             self._pipeline.put_frame(frame)
             tracks = self._pipeline.get_tracked_detections()
 
-            frame = self._time_tracker.track_time(frame, tracks)
-
-            # frame = self._object_counter.start_counting(frame, tracks)
-            # self._publish_counts(previous_counts)
+            frame = self._solution.process_frame(frame, tracks)
 
             if self._config.get("save", False):
                 self._video_writer.write(frame)
@@ -155,9 +119,6 @@ class LogiScanPy:
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     break
-                elif key == ord("r"):
-                    pass
-                    # self._reset_counts(previous_counts)
 
     def cleanup(self) -> None:
         """Clean up resources."""
@@ -167,7 +128,6 @@ class LogiScanPy:
             self._video_writer.release()
         self._pipeline.stop_processes()
         cv2.destroyAllWindows()
-        # self._publisher.close_connection()
         _LOGGER.info("Cleanup completed successfully")
 
     def run_app(self) -> None:
