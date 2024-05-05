@@ -94,7 +94,7 @@ class TimeTracker(Solution):
 
         return im0
 
-    def get_times(self) -> Dict[int, Dict[str, float]]:
+    def get_action_data(self) -> Dict[int, Dict[str, float]]:
         """Returns a dictionary containing the time spent by each object within the regions.
 
         Returns: Dict[int, Dict[str, float]]: A nested dictionary where the outer keys are track IDs (integers),
@@ -102,7 +102,7 @@ class TimeTracker(Solution):
         """
         return self._times.copy()
 
-    def reset_times(self):
+    def reset(self):
         """Resets the time spent and entry times."""
         self._times.clear()
         self._entry_times.clear()

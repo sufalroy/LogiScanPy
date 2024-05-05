@@ -3,6 +3,8 @@ from typing import Dict, Optional
 
 import cv2
 
+from logiscanpy.core.actions import Action
+from logiscanpy.core.actions.action_factory import ActionFactory
 from logiscanpy.core.pipeline import Pipeline
 from logiscanpy.core.solutions import Solution
 from logiscanpy.core.solutions.solution_factory import SolutionFactory
@@ -16,7 +18,7 @@ _DEFAULT_NAMES = load_class_names("../config/coco.yaml")
 
 
 class LogiScanPy:
-    """LogiScanPy class for object detection and counting."""
+    """LogiScanPy class for performing video analytics."""
 
     def __init__(self, config: Dict[str, str]):
         self._config = config
@@ -24,6 +26,7 @@ class LogiScanPy:
         self._video_capture: Optional[VideoCapture] = None
         self._video_writer: Optional[cv2.VideoWriter] = None
         self._solution: Optional[Solution] = None
+        self._action: Optional[Action] = None
         self._window_name = "LogiScan.v.0.1.0"
 
     def initialize(self) -> bool:
@@ -88,6 +91,8 @@ class LogiScanPy:
             debug=True
         )
 
+        self._action = ActionFactory.create_action(self._config.get('solution_type'))
+
         _LOGGER.info("Initialization completed successfully")
         return True
 
@@ -109,6 +114,9 @@ class LogiScanPy:
             tracks = self._pipeline.get_tracked_detections()
 
             frame = self._solution.process_frame(frame, tracks)
+            action_data = self._solution.get_action_data()
+
+            self._action.execute(action_data)
 
             if self._config.get("save", False):
                 self._video_writer.write(frame)
@@ -119,6 +127,8 @@ class LogiScanPy:
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     break
+                if key == ord("r"):
+                    self._solution.reset()
 
     def cleanup(self) -> None:
         """Clean up resources."""
@@ -127,6 +137,7 @@ class LogiScanPy:
         if self._config.get("save", False):
             self._video_writer.release()
         self._pipeline.stop_processes()
+        self._action.cleanup()
         cv2.destroyAllWindows()
         _LOGGER.info("Cleanup completed successfully")
 
@@ -136,6 +147,7 @@ class LogiScanPy:
 
         if not self.initialize():
             _LOGGER.error("Initialization failed, exiting application")
+            self.cleanup()
             return
 
         try:

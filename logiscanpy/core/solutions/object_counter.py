@@ -120,16 +120,16 @@ class ObjectCounter(Solution):
 
         return im0
 
-    def reset_counts(self):
-        """Resets the in counts, count IDs, and class-wise counts."""
-        self._in_counts = 0
-        self._count_ids.clear()
-        self._class_wise_count.clear()
-
-    def get_class_wise_count(self) -> Dict[str, int]:
+    def get_action_data(self) -> Dict[str, int]:
         """Returns a dictionary containing the class-wise counts for objects entering the region.
 
         Returns:
             Dict[str, int]: A dictionary where keys are class names (strings) and values are in counts (integers).
         """
         return self._class_wise_count.copy()
+
+    def reset(self):
+        """Resets the in counts, count IDs, and class-wise counts."""
+        self._in_counts = 0
+        self._count_ids.clear()
+        self._class_wise_count.clear()
