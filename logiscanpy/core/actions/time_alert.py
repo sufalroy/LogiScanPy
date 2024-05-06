@@ -1,6 +1,5 @@
-from typing import Dict
-
 from logiscanpy.core.actions import Action
+from logiscanpy.core.solutions import Solution
 
 
 class TimeAlert(Action):
@@ -20,7 +19,7 @@ class TimeAlert(Action):
         self._time_threshold = time_threshold
         self._object_threshold = object_threshold
 
-    def execute(self, data: Dict[int, Dict[str, float]]) -> None:
+    def execute(self, solution: Solution) -> None:
         """Checks if the time spent by objects exceeds the threshold and prints an alert if necessary.
 
         This method iterates over the provided data, which is a nested dictionary where the outer keys are track IDs
@@ -29,10 +28,10 @@ class TimeAlert(Action):
         condition, an alert is printed.
 
         Args:
-            data (Dict[int, Dict[str, float]]): The time spent by objects, organized by track ID and class name.
+            solution (Solution): The solution object.
         """
         alert_count = 0
-        for track_id, class_times in data.items():
+        for track_id, class_times in solution.get_action_data().items():
             for class_name, time_spent in class_times.items():
                 if time_spent > self._time_threshold:
                     alert_count += 1
@@ -40,6 +39,7 @@ class TimeAlert(Action):
 
         if alert_count > self._object_threshold:
             print(f"Alert: More than one object has spent more than {self._time_threshold} seconds.")
+            solution.reset()
 
     def cleanup(self) -> None:
         """Cleans up resources used by the action."""

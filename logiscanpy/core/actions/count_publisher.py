@@ -1,7 +1,7 @@
-from typing import Dict
 import logging
 
 from logiscanpy.core.actions import Action
+from logiscanpy.core.solutions import Solution
 from logiscanpy.utility.publisher import Publisher
 
 _LOGGER = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class CountPublisher(Action):
         self._publisher = Publisher()
         self._previous_counts = {}
 
-    def execute(self, data: Dict[str, int]) -> None:
+    def execute(self, solution: Solution) -> None:
         """Publishes counts for detected objects.
 
         This method iterates over the provided data, which should be a dictionary mapping
@@ -27,9 +27,9 @@ class CountPublisher(Action):
         since the last execution.
 
         Args:
-            data (Dict[str, int]): The counts of detected objects.
+            solution (Solution): The solution object.
         """
-        for class_name, count in data.items():
+        for class_name, count in solution.get_action_data().items():
             if class_name not in self._previous_counts or count != self._previous_counts[class_name]:
                 _LOGGER.debug("Publishing count for %s: %d", class_name, count)
                 self._publisher.publish_message(class_name, count)

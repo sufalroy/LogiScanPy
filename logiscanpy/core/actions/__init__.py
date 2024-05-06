@@ -1,16 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from logiscanpy.core.solutions import Solution
 
 
 class Action(ABC):
     """Abstract base class for actions in the LogiScanPy application."""
 
     @abstractmethod
-    def execute(self, data: Any) -> None:
-        """Executes the action with the given data.
+    def execute(self, solution: Solution) -> None:
+        """Executes the action with the given solution.
 
         Args:
-            data (Any): The data required for the action.
+           solution (Solution): The solution object.
         """
         pass
 

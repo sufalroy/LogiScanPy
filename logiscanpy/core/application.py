@@ -120,9 +120,7 @@ class LogiScanPy:
             tracks = self._pipeline.get_tracked_detections()
 
             frame = self._solution.process_frame(frame, tracks)
-            action_data = self._solution.get_action_data()
-
-            self._action.execute(action_data)
+            self._action.execute(self._solution)
 
             if self._config.get("save", False):
                 self._video_writer.write(frame)
@@ -163,7 +161,6 @@ class LogiScanPy:
 
         if not self.initialize():
             _LOGGER.error("Initialization failed, exiting application")
-            self.cleanup()
             return
 
         try:
