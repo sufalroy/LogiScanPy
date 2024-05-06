@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Dict, Optional
 
 import cv2
@@ -88,7 +89,7 @@ class LogiScanPy:
         self._solution.set_params(
             reg_pts=polygons,
             classes_names=_NAMES,
-            debug=True
+            debug=self._config.get("show", False),
         )
 
         self._action = ActionFactory.create_action(self._config.get('solution_type'))
@@ -100,7 +101,12 @@ class LogiScanPy:
         """Run the object detection and counting process."""
         _LOGGER.info("Starting video processing...")
 
+        fps = 0
+        frame_count = 0
+
         while True:
+            start_time = time.time()
+
             frame = self._video_capture.read()
             if frame is None:
                 _LOGGER.info(
@@ -123,6 +129,16 @@ class LogiScanPy:
 
             if self._config.get("show", False):
                 cv2.namedWindow(self._window_name)
+
+                end_time = time.time()
+                frame_count += 1
+                elapsed_time = end_time - start_time
+                if elapsed_time > 0:
+                    fps = 1.0 / elapsed_time
+
+                fps_text = f"FPS: {fps:.2f}"
+                cv2.putText(frame, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
                 cv2.imshow(self._window_name, frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
