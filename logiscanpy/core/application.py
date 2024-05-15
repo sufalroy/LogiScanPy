@@ -6,6 +6,7 @@ import cv2
 
 from logiscanpy.core.actions import Action
 from logiscanpy.core.actions.action_factory import ActionFactory
+from logiscanpy.core.detection.detection_factory import Engine
 from logiscanpy.core.pipeline import Pipeline
 from logiscanpy.core.solutions import Solution
 from logiscanpy.core.solutions.solution_factory import SolutionFactory
@@ -14,7 +15,6 @@ from logiscanpy.utility.config import load_class_names
 from logiscanpy.utility.video_capture import RtspVideoCapture, VideoCapture
 
 _LOGGER = logging.getLogger(__name__)
-_TARGET_RESOLUTION = (640, 640)
 _DEFAULT_NAMES = load_class_names("../config/coco.yaml")
 
 
@@ -40,11 +40,10 @@ class LogiScanPy:
 
         _LOGGER.debug("Initializing Detection and Tracking Pipeline")
         self._pipeline = Pipeline(
-            onnx_model_path=self._config.get("weights"),
+            engine=Engine.ORT_OBJECT_DETECTION_SEGMENTATION,
+            model_path=self._config.get("weights"),
             confidence_thres=float(self._config.get("confidence")),
-            iou_thres=0.45,
-            is_seg=bool(self._config.get("is_seg")),
-            target_class_id=int(self._config.get("class_id"))
+            iou_thres=0.7,
         )
         self._pipeline.start_processes()
 
@@ -65,7 +64,6 @@ class LogiScanPy:
                 self._config["output"],
                 cv2.VideoWriter_fourcc(*"mp4v"),
                 30,
-                _TARGET_RESOLUTION,
             )
 
         frame = self._video_capture.read()
@@ -73,7 +71,6 @@ class LogiScanPy:
             _LOGGER.error("Failed to read first frame from video source")
             return False
 
-        frame = cv2.resize(frame, _TARGET_RESOLUTION)
         _LOGGER.debug("Calibrating region of interest...")
         polygons = calibrate_region(frame)
 
@@ -113,8 +110,6 @@ class LogiScanPy:
                     "Video frame is empty or video processing has been successfully completed."
                 )
                 break
-
-            frame = cv2.resize(frame, _TARGET_RESOLUTION)
 
             self._pipeline.put_frame(frame)
             tracks = self._pipeline.get_tracked_detections()

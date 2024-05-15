@@ -49,11 +49,6 @@ def read_config() -> Dict[str, str]:
         raise TypeError("The 'weights' parameter must be a string.")
     app_config["weights"] = weights
 
-    is_seg = config.getboolean("app", "is_seg", fallback=True)
-    if not isinstance(is_seg, bool):
-        raise TypeError("The 'is_seg' parameter must be a boolean.")
-    app_config["is_seg"] = is_seg
-
     video = config.get("app", "video", fallback=None)
     if not isinstance(video, str):
         raise TypeError("The 'video' parameter must be a string.")
@@ -73,11 +68,6 @@ def read_config() -> Dict[str, str]:
     if not isinstance(class_names_file, str):
         raise TypeError("The 'class_names_file' parameter must be a string.")
     app_config["class_names_file"] = class_names_file
-
-    class_id = config.getint("app", "class_id", fallback=0)
-    if not isinstance(class_id, int):
-        raise TypeError("The 'class_id' parameter must be an integer.")
-    app_config["class_id"] = class_id
 
     confidence = config.getfloat("app", "confidence", fallback=0.5)
     if not isinstance(confidence, float):

@@ -38,7 +38,7 @@ class TimeAlert(Action):
                     break
 
         if alert_count > self._object_threshold:
-            print(f"Alert: More than one object has spent more than {self._time_threshold} seconds.")
+            print(f"Alert: an object has spent more than {self._time_threshold} seconds.")
             solution.reset()
 
     def cleanup(self) -> None:

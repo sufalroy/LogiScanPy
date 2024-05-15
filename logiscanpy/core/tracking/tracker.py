@@ -4,8 +4,8 @@ from typing import List, Tuple
 
 import numpy as np
 
-from logiscanpy.core.tracker import matching
-from logiscanpy.core.tracker.kalman_filter import KalmanFilter
+from logiscanpy.core.tracking import matching
+from logiscanpy.core.tracking.kalman_filter import KalmanFilter
 
 
 class TrackState(Enum):

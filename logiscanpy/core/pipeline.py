@@ -1,10 +1,9 @@
 import multiprocessing as mp
-from typing import Union
 
 import numpy as np
 
-from logiscanpy.core.detector.detector import YOLOv8, YOLOv8Seg
-from logiscanpy.core.tracker.tracker import ByteTrack
+from logiscanpy.core.detection.detection_factory import DetectionFactory, Engine
+from logiscanpy.core.tracking.tracker import ByteTrack
 
 
 class DetectionProcess(mp.Process):
@@ -13,11 +12,10 @@ class DetectionProcess(mp.Process):
             self,
             input_queue: mp.Queue,
             output_queue: mp.Queue,
-            onnx_model: str,
+            engine: Engine,
+            model_path: str,
             confidence_threshold: float,
             iou_threshold: float,
-            is_seg: bool = True,
-            target_class_id: int = 0,
     ):
         """
         Initializes the DetectionProcess with the given parameters.
@@ -25,62 +23,38 @@ class DetectionProcess(mp.Process):
         Args:
             input_queue (mp.Queue): The queue to get images from.
             output_queue (mp.Queue): The queue to put detections into.
-            onnx_model (str): The path to the ONNX model.
+            engine (Engine): The detection engine to use.
+            model_path (str): The path to the model.
             confidence_threshold (float): The confidence threshold for detections.
             iou_threshold (float): The IoU threshold for detections.
-            is_seg (bool, optional): Whether to use YOLOv8Seg. Defaults to True.
-            target_class_id (int, optional): The target class id. Defaults to 0.
         """
         super().__init__()
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.onnx_model = onnx_model
+        self.engine = engine
+        self.model_path = model_path
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
-        self.is_seg = is_seg
-        self.target_class_id = target_class_id
-
-    def initialize_model(self) -> Union[YOLOv8, YOLOv8Seg]:
-        """
-        Initializes the model based on the is_seg flag.
-
-        Returns:
-            Union[YOLOv8, YOLOv8Seg]: The initialized detector instance.
-        """
-        if self.is_seg:
-            return YOLOv8Seg(self.onnx_model)
-        else:
-            return YOLOv8(self.onnx_model, self.confidence_threshold, self.iou_threshold)
+        self.factory = DetectionFactory()
 
     def run(self):
         """
         Runs the detection process in a loop, processing images from the input queue.
         """
-        model = self.initialize_model()
+        detector = self.factory.create_detector(
+            self.engine,
+            self.model_path,
+            self.confidence_threshold,
+            self.iou_threshold
+        )
+
         while True:
             img = self.input_queue.get()
             if img is None:
                 break
 
-            if self.is_seg:
-                detections, _, _ = model.detect(
-                    img,
-                    class_id=self.target_class_id,
-                    iou_threshold=self.iou_threshold,
-                    conf_threshold=self.confidence_threshold
-                )
-                detections = np.array(detections)
-                class_ids = np.array([det[-1] for det in detections])
-                scores = np.array([det[-2] for det in detections])
-                boxes = np.array([det[:4] for det in detections])
-
-            else:
-                detections = model.detect(img, [self.target_class_id])
-                boxes = detections[:, :4]
-                scores = detections[:, 4]
-                class_ids = detections[:, 5]
-
-            self.output_queue.put((boxes, scores, class_ids))
+            detections = detector.detect(img)
+            self.output_queue.put(detections)
 
 
 class TrackingProcess(mp.Process):
@@ -109,12 +83,11 @@ class TrackingProcess(mp.Process):
         Runs the tracking process in a loop, processing detections from the input queue.
         """
         while True:
-            item = self.input_queue.get()
-            if item is None:
+            det = self.input_queue.get()
+            if det is None:
                 break
 
-            boxes, scores, class_ids = item
-            tracked_detections = self.tracker.update_with_detections(boxes, scores, class_ids)
+            tracked_detections = self.tracker.update_with_detections(det[:, :4], det[:, 4], det[:, 5])
             self.output_queue.put(tracked_detections)
 
 
@@ -122,17 +95,15 @@ class Pipeline:
 
     def __init__(
             self,
-            onnx_model_path: str,
+            engine: Engine,
+            model_path: str,
             confidence_thres: float,
             iou_thres: float,
-            is_seg: bool,
-            target_class_id: int
     ):
-        self.onnx_model_path = onnx_model_path
+        self.engine = engine
+        self.model_path = model_path
         self.confidence_thres = confidence_thres
         self.iou_thres = iou_thres
-        self.is_seg = is_seg
-        self.target_class_id = target_class_id
         self.input_queue = mp.Queue()
         self.detection_queue = mp.Queue()
         self.tracking_queue = mp.Queue()
@@ -146,11 +117,10 @@ class Pipeline:
         self.detection_process = DetectionProcess(
             self.input_queue,
             self.detection_queue,
-            self.onnx_model_path,
+            self.engine,
+            self.model_path,
             self.confidence_thres,
             self.iou_thres,
-            is_seg=self.is_seg,
-            target_class_id=self.target_class_id
         )
         tracker = ByteTrack(
             track_activation_threshold=0.25,

@@ -9,3 +9,6 @@ setuptools>=69.2.0
 scipy>=1.13.0
 onnxruntime>=1.17.1
 PyYAML>=6.0.1
+openvino>=2024.1.0
+torch>=2.2.2
+ultralytics>=8.1.45
