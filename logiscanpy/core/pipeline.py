@@ -60,7 +60,9 @@ class DetectionProcess(mp.Process):
                 scores = detections[:, 4]
                 class_ids = detections[:, 5]
             else:
-                boxes, scores, class_ids = np.array([]), np.array([]), np.array([])
+                boxes = np.array([])
+                scores = np.array([])
+                class_ids = np.array([])
 
             self.output_queue.put((boxes, scores, class_ids))
 

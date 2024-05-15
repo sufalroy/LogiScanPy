@@ -41,7 +41,7 @@ class LogiScanPy:
 
         _LOGGER.debug("Initializing Detection and Tracking Pipeline")
         self._pipeline = Pipeline(
-            engine=Engine.OV_OBJECT_DETECTION_SEGMENTATION,
+            engine=Engine.ORT_OBJECT_DETECTION_SEGMENTATION,
             model_path=self._config.get("weights"),
             confidence_thres=float(self._config.get("confidence")),
             iou_thres=0.7,
