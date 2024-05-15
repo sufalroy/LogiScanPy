@@ -73,7 +73,7 @@ class YOLOv8OV(Detector):
             torch.from_numpy(pred_boxes),
             self.confidence_threshold,
             self.iou_threshold,
-            nc=80,
+            nc=1,
             **nms_kwargs
         )
 

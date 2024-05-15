@@ -54,7 +54,15 @@ class DetectionProcess(mp.Process):
                 break
 
             detections = detector.detect(img)
-            self.output_queue.put(detections)
+
+            if len(detections) > 0:
+                boxes = detections[:, :4]
+                scores = detections[:, 4]
+                class_ids = detections[:, 5]
+            else:
+                boxes, scores, class_ids = np.array([]), np.array([]), np.array([])
+
+            self.output_queue.put((boxes, scores, class_ids))
 
 
 class TrackingProcess(mp.Process):
@@ -83,11 +91,12 @@ class TrackingProcess(mp.Process):
         Runs the tracking process in a loop, processing detections from the input queue.
         """
         while True:
-            det = self.input_queue.get()
-            if det is None:
+            item = self.input_queue.get()
+            if item is None:
                 break
 
-            tracked_detections = self.tracker.update_with_detections(det[:, :4], det[:, 4], det[:, 5])
+            boxes, scores, class_ids = item
+            tracked_detections = self.tracker.update_with_detections(boxes, scores, class_ids)
             self.output_queue.put(tracked_detections)
 
 

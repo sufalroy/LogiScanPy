@@ -193,6 +193,8 @@ class YOLOv8SegORT(Detector):
             detections = np.hstack((x[..., :4], x[..., 4:5], x[..., 5:6]))
 
             return detections, segments
+        else:
+            return np.array([]), []
 
     def detect(self, image: np.ndarray) -> ndarray:
         """Detect objects in the given image.
