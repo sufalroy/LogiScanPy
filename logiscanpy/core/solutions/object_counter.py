@@ -1,10 +1,10 @@
 import logging
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
-import cv2
 import numpy as np
 from shapely.geometry import Point, Polygon
+from ultralytics.utils.plotting import Annotator, colors
 
 from logiscanpy.core.solutions import Solution
 
@@ -16,16 +16,17 @@ class ObjectCounter(Solution):
 
     def __init__(self):
         """Initializes the Counter with default values."""
-        self._reg_pts: List[List[Tuple[int, int]]] = [[(300, 300), (400, 300), (400, 400), (300, 400)]]
-        self._counting_regions: List[Polygon] = [Polygon(self._reg_pts[0])]
-        self._names: List[str] = []
-        self._in_counts: int = 0
-        self._count_ids: List[int] = []
-        self._class_wise_count: Dict[str, int] = {}
-        self._track_history: defaultdict = defaultdict(list)
-        self._region_color: Tuple[int, int, int] = (255, 0, 0)
-        self._region_thickness: int = 2
-        self._debug = True
+        self.reg_pts: List[List[Tuple[int, int]]] = [[(300, 300), (400, 300), (400, 400), (300, 400)]]
+        self.counting_regions: List[Polygon] = [Polygon(self.reg_pts[0])]
+        self.names: List[str] = []
+        self.in_counts: int = 0
+        self.count_ids: List[int] = []
+        self.class_wise_count: Dict[str, int] = {}
+        self.track_history: defaultdict = defaultdict(list)
+        self.region_color: Tuple[int, int, int] = (255, 0, 0)
+        self.region_thickness: int = 2
+        self.debug: bool = True
+        self.annotator: Optional[Annotator] = None
 
     def set_params(self, classes_names: List[str], reg_pts: List[List[Tuple[int, int]]], debug: bool):
         """Configures the Counter's counting region points and class names.
@@ -35,14 +36,14 @@ class ObjectCounter(Solution):
             reg_pts (List[List[Tuple[int, int]]]): List of lists of region points.
             debug (bool): Whether to enable debug mode.
         """
-        self._reg_pts = reg_pts
-        self._counting_regions = [Polygon(pts) for pts in reg_pts if len(pts) >= 3]
-        if not self._counting_regions:
+        self.reg_pts = reg_pts
+        self.counting_regions = [Polygon(pts) for pts in reg_pts if len(pts) >= 3]
+        if not self.counting_regions:
             _LOGGER.warning(
                 "Invalid Region points provided, region_points must be >= 3 for polygons."
             )
-        self._names = classes_names
-        self._debug = debug
+        self.names = classes_names
+        self.debug = debug
 
     def process_frame(self, im0: np.ndarray, tracks: np.ndarray) -> np.ndarray:
         """
@@ -56,10 +57,13 @@ class ObjectCounter(Solution):
         Returns:
             np.ndarray: Frame with annotations and counting results (if debug is True).
         """
-        if self._debug:
-            for region in self._counting_regions:
+        self.annotator = Annotator(im0, self.region_thickness, self.names)
+
+        if self.debug:
+            for region in self.counting_regions:
                 region_pts = np.array(region.exterior.coords, np.int32).reshape((-1, 1, 2))
-                cv2.polylines(im0, [region_pts], True, self._region_color, self._region_thickness)
+                self.annotator.draw_region(reg_pts=region_pts, color=self.region_color,
+                                           thickness=self.region_thickness)
 
         if len(tracks) == 0:
             return im0
@@ -71,52 +75,43 @@ class ObjectCounter(Solution):
 
             box_center = Point(((x1 + x2) / 2, (y1 + y2) / 2))
 
-            if self._names[class_id] not in self._class_wise_count:
-                self._class_wise_count[self._names[class_id]] = 0
+            if self.names[class_id] not in self.class_wise_count:
+                self.class_wise_count[self.names[class_id]] = 0
 
-            self._track_history[track_id].append(box_center)
-            if len(self._track_history[track_id]) > 30:
-                self._track_history[track_id].pop(0)
+            self.track_history[track_id].append(box_center)
+            if len(self.track_history[track_id]) > 30:
+                self.track_history[track_id].pop(0)
 
             prev_position = (
-                self._track_history[track_id][-2]
-                if len(self._track_history[track_id]) > 1
+                self.track_history[track_id][-2]
+                if len(self.track_history[track_id]) > 1
                 else None
             )
 
-            if prev_position is not None and track_id not in self._count_ids:
-                for region in self._counting_regions:
+            if prev_position is not None and track_id not in self.count_ids:
+                for region in self.counting_regions:
                     if region.contains(box_center):
-                        self._count_ids.append(track_id)
+                        self.count_ids.append(track_id)
                         if not region.contains(prev_position):
-                            self._in_counts += 1
-                            self._class_wise_count[self._names[class_id]] += 1
+                            self.in_counts += 1
+                            self.class_wise_count[self.names[class_id]] += 1
                             break
 
-            if self._debug:
-                label = f"{self._names[class_id]}#{track_id}"
-                cv2.rectangle(im0, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                cv2.putText(im0, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+            if self.debug:
+                label = f"{self.names[class_id]}#{track_id}"
+                self.annotator.box_label(
+                    (x1, y1, x2, y2),
+                    label=label,
+                    color=colors(int(track_id), True),
+                )
 
-        if self._debug:
-            label = [
-                f"{str.capitalize(key)}: IN {value}"
-                for key, value in self._class_wise_count.items()
+        if self.debug:
+            labels_dict = {
+                str.capitalize(key): f"IN {value}"
+                for key, value in self.class_wise_count.items()
                 if value != 0
-            ]
-            label = "".join(label)
-            (label_width, label_height), baseline = cv2.getTextSize(
-                label, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2
-            )
-            cv2.putText(
-                im0,
-                label,
-                (im0.shape[1] - label_width - 10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 255, 0),
-                2,
-            )
+            }
+            self.annotator.display_analytics(im0, labels_dict, (255, 255, 255), (0, 0, 0), 5)
 
         return im0
 
@@ -126,10 +121,10 @@ class ObjectCounter(Solution):
         Returns:
             Dict[str, int]: A dictionary where keys are class names (strings) and values are in counts (integers).
         """
-        return self._class_wise_count.copy()
+        return self.class_wise_count.copy()
 
     def reset(self):
         """Resets the in counts, count IDs, and class-wise counts."""
-        self._in_counts = 0
-        self._count_ids.clear()
-        self._class_wise_count.clear()
+        self.in_counts = 0
+        self.count_ids.clear()
+        self.class_wise_count.clear()
