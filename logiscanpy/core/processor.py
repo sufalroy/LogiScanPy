@@ -123,6 +123,7 @@ class Processor:
             if frame is None:
                 _LOGGER.info("[FRAME] Video frame is empty or video processing has been successfully completed.")
                 self._stop_event = True
+                break
 
             frame = cv2.resize(frame, _TARGET_RESOLUTION)
 
