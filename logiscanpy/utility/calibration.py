@@ -19,7 +19,7 @@ def draw_polygon(event: int, x: int, y: int, flags: int,
     if event == cv2.EVENT_LBUTTONDOWN:
         current_polygon.append((x, y))
         cv2.circle(img, (x, y), 3, (0, 0, 255), -1)
-        cv2.polylines(img, [np.array(current_polygon, np.int32).reshape((-1, 1, 2))], True, (0, 255, 0), 2)
+        cv2.polylines(img, [np.array(current_polygon, np.int32).reshape((-1, 1, 2))], True, (0, 0, 255), 2)
     elif event == cv2.EVENT_RBUTTONDOWN:
         current_polygon.clear()
         img[:] = frame.copy()

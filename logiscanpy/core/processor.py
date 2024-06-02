@@ -146,7 +146,7 @@ class Processor:
                     fps = 1.0 / elapsed_time
 
                 fps_text = f"FPS: {fps:.2f}"
-                cv2.putText(frame, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2.putText(frame, fps_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
                 cv2.imshow(self._window_name, frame)
                 key = cv2.waitKey(1) & 0xFF
