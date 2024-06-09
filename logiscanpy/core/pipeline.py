@@ -2,7 +2,7 @@ import multiprocessing as mp
 
 import numpy as np
 
-from logiscanpy.core.detection.detection_factory import DetectionFactory, Engine
+from logiscanpy.core.detection.detection_factory import DetectionFactory, Model
 from logiscanpy.core.tracking.tracker import ByteTrack
 
 
@@ -12,7 +12,7 @@ class DetectionProcess(mp.Process):
             self,
             input_queue: mp.Queue,
             output_queue: mp.Queue,
-            engine: Engine,
+            model: Model,
             model_path: str,
             confidence_threshold: float,
             iou_threshold: float,
@@ -23,7 +23,7 @@ class DetectionProcess(mp.Process):
         Args:
             input_queue (mp.Queue): The queue to get images from.
             output_queue (mp.Queue): The queue to put detections into.
-            engine (Engine): The detection engine to use.
+            model (Model): The model to use for detection.
             model_path (str): The path to the model.
             confidence_threshold (float): The confidence threshold for detections.
             iou_threshold (float): The IoU threshold for detections.
@@ -31,7 +31,7 @@ class DetectionProcess(mp.Process):
         super().__init__()
         self.input_queue = input_queue
         self.output_queue = output_queue
-        self.engine = engine
+        self.model = model
         self.model_path = model_path
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
@@ -42,7 +42,7 @@ class DetectionProcess(mp.Process):
         Runs the detection process in a loop, processing images from the input queue.
         """
         detector = self.factory.create_detector(
-            self.engine,
+            self.model,
             self.model_path,
             self.confidence_threshold,
             self.iou_threshold
@@ -106,12 +106,12 @@ class Pipeline:
 
     def __init__(
             self,
-            engine: Engine,
+            model: Model,
             model_path: str,
             confidence_thres: float,
             iou_thres: float,
     ):
-        self.engine = engine
+        self.model = model
         self.model_path = model_path
         self.confidence_thres = confidence_thres
         self.iou_thres = iou_thres
@@ -128,7 +128,7 @@ class Pipeline:
         self.detection_process = DetectionProcess(
             self.input_queue,
             self.detection_queue,
-            self.engine,
+            self.model,
             self.model_path,
             self.confidence_thres,
             self.iou_thres,

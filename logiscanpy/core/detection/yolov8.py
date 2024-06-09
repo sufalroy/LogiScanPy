@@ -4,17 +4,17 @@ import cv2
 import numpy as np
 import torch
 from numpy import ndarray
-from openvino import Core, CompiledModel
 from ultralytics.utils import ops
 
 from logiscanpy.core.detection import Detector
+from logiscanpy.core.detection.tensorrt_api.cudart_api import TensorRTEngine
 
 
-class YOLOv8OV(Detector):
-    """YOLOv8 object detection and instance segmentation model using OpenVINO.
+class YOLOv8(Detector):
+    """YOLOv8 object detection and instance segmentation model.
 
     Args:
-        model_path (str): Path to the OpenVINO YOLOv8 detection model.
+        model_path (str): Path to the TensorRT YOLOv8 detection model.
         confidence_threshold (float): Minimum confidence threshold for detection.
         iou_threshold (float): Intersection over Union (IoU) threshold for non-maximum suppression.
         agnostic_nms (bool): Whether to apply class-agnostic non-maximum suppression.
@@ -32,7 +32,8 @@ class YOLOv8OV(Detector):
         self.agnostic_nms = agnostic_nms
         self.max_detections = max_detections
         self.retina_mask = retina_mask
-        self.det_compiled_model = self._build_ov_model(model_path)
+        self.det_compiled_model = TensorRTEngine(model_path)
+        self.H, self.W = self.det_compiled_model.inp_info[0].shape[-2:]
 
     def preprocess(self, img0: np.ndarray) -> np.ndarray:
         """Preprocess image according to YOLOv8 input requirements. Takes image in np.array format, resizes it to
@@ -44,7 +45,7 @@ class YOLOv8OV(Detector):
         Returns:
             img (np.ndarray): Image after preprocessing.
         """
-        img = self._letterbox(img0)[0]
+        img = self._letterbox(img0, (self.W, self.H))[0]
         img = img.transpose(2, 0, 1)
         img = np.ascontiguousarray(img)
         return img
@@ -113,14 +114,14 @@ class YOLOv8OV(Detector):
               Returns:
                   np.ndarray: Array of detections in the format [x1, y1, x2, y2, score, label].
         """
-        num_outputs = len(self.det_compiled_model.outputs)
+        num_outputs = self.det_compiled_model.num_outputs
         preprocessed_image = self.preprocess(image)
         input_tensor = self._image_to_tensor(preprocessed_image)
         result = self.det_compiled_model(input_tensor)
-        boxes = result[self.det_compiled_model.output(0)]
+        boxes = result[1]
         masks = None
         if num_outputs > 1:
-            masks = result[self.det_compiled_model.output(1)]
+            masks = result[0]
         input_hw = input_tensor.shape[2:]
         detections = self.postprocess(
             pred_boxes=boxes,
@@ -129,12 +130,6 @@ class YOLOv8OV(Detector):
             pred_masks=masks,
         )
         return detections[0]["det"]
-
-    @staticmethod
-    def _build_ov_model(det_model_path: str) -> CompiledModel:
-        core = Core()
-        det_ov_model = core.read_model(det_model_path)
-        return core.compile_model(det_ov_model, 'CPU')
 
     @staticmethod
     def _letterbox(

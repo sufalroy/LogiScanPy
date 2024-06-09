@@ -4,7 +4,7 @@ from typing import List, Dict
 
 import yaml
 
-from logiscanpy.core.detection.detection_factory import Engine
+from logiscanpy.core.detection.detection_factory import Model
 
 
 def load_class_names(config_path: str) -> List[str]:
@@ -74,14 +74,14 @@ def read_config(config_path: str) -> List[Dict[str, str]]:
             solution_type = config.get(section, "solution_type", fallback=None)
             app_config["solution_type"] = solution_type
 
-            engine_str = config.get(section, "engine", fallback=None)
-            if engine_str is not None:
+            model_str = config.get(section, "model", fallback=None)
+            if model_str is not None:
                 try:
-                    engine_enum = Engine[engine_str]
-                    app_config["engine"] = engine_enum
+                    model_enum = Model[model_str]
+                    app_config["model"] = model_enum
                 except KeyError:
                     raise ValueError(
-                        f"Invalid engine type '{engine_str}'. Must be one of {list(Engine.__members__.keys())}")
+                        f"Invalid engine type '{model_str}'. Must be one of {list(Model.__members__.keys())}")
 
             app_configs.append(app_config)
 

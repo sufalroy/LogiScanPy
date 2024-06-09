@@ -93,7 +93,7 @@ class Processor:
 
         _LOGGER.debug("[PIPELINE] Initializing Detection and Tracking Pipeline")
         self._pipeline = Pipeline(
-            engine=self._config.get("engine"),
+            model=self._config.get("model"),
             model_path=self._config.get("weights"),
             confidence_thres=float(self._config.get("confidence")),
             iou_thres=0.7,
